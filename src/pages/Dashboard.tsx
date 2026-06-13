@@ -1,16 +1,19 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { FileText, Users, IndianRupee, CalendarCheck, FilePlus2, FlaskConical, Receipt } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { KpiTile, Spinner, EmptyState } from "../components/ui";
+import { ReportActionsSheet } from "../components/report/ReportActionsSheet";
 import { useRecentReports, usePatients } from "../hooks/useLabData";
 import { fmtDateTime, fmtMoney, isToday } from "../lib/format";
 import { useAuth } from "../lib/auth";
+import type { LabReport } from "../lib/types";
 
 export function Dashboard() {
   const { user } = useAuth();
-  const nav = useNavigate();
   const reports = useRecentReports(50);
   const patients = usePatients();
+  const [active, setActive] = useState<LabReport | null>(null);
 
   const list = reports.data ?? [];
   const todayCount = list.filter((r) => isToday(r.createdAt)).length;
@@ -66,7 +69,7 @@ export function Dashboard() {
               </thead>
               <tbody>
                 {list.slice(0, 8).map((r) => (
-                  <tr key={r.id} onClick={() => nav(`/app/reports/${r.id}/verify`)} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-bg)] cursor-pointer">
+                  <tr key={r.id} onClick={() => setActive(r)} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-bg)] cursor-pointer">
                     <td className="px-4 py-3 font-medium">{r.patientName || "—"}</td>
                     <td className="px-4 py-3 text-[var(--color-muted)]">{r.testType}</td>
                     <td className="px-4 py-3 text-[var(--color-muted)] num">{fmtDateTime(r.createdAt)}</td>
@@ -89,6 +92,8 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
+      {active && <ReportActionsSheet report={active} onClose={() => setActive(null)} />}
     </div>
   );
 }

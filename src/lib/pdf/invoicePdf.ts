@@ -58,7 +58,7 @@ function rupeesInWords(amount: number): string {
   return words.trim();
 }
 
-function header(config: HospitalConfig): Content {
+function header(config: HospitalConfig, logo?: string): Content {
   const name = (cfg(config, "name", "hospital_name") || "DIAGNOSTIC LABORATORY").toUpperCase();
   const subtitle = cfg(config, "report_header_subtitle", "reportHeaderSubtitle");
   const address = cfg(config, "address");
@@ -72,6 +72,7 @@ function header(config: HospitalConfig): Content {
     stack: [
       {
         columns: [
+          ...(logo ? [{ width: 42, image: logo, fit: [40, 40], margin: [0, 0, 8, 0] } as Content] : []),
           {
             width: "*",
             stack: [
@@ -218,12 +219,29 @@ function footer(config: HospitalConfig): Content {
   };
 }
 
-export function buildInvoiceDoc(inv: InvoiceModel, config: HospitalConfig): TDocumentDefinitions {
+/** Best-effort fetch of a remote image as a data URL for pdfmake embedding. */
+async function fetchAsDataUrl(url?: string): Promise<string | undefined> {
+  if (!url) return undefined;
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    const blob = await res.blob();
+    return await new Promise((resolve) => {
+      const fr = new FileReader();
+      fr.onloadend = () => resolve(fr.result as string);
+      fr.onerror = () => resolve(undefined);
+      fr.readAsDataURL(blob);
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+export function buildInvoiceDoc(inv: InvoiceModel, config: HospitalConfig, logo?: string): TDocumentDefinitions {
   return {
     pageSize: "A4",
     pageMargins: [42, 32, 42, 28],
     content: [
-      header(config),
+      header(config, logo),
       patientInfo(inv),
       { text: "Invoice", fontSize: 11, bold: true, color: BLACK, margin: [0, 10, 0, 0] },
       invoiceTable(inv),
@@ -238,9 +256,10 @@ export function buildInvoiceDoc(inv: InvoiceModel, config: HospitalConfig): TDoc
   };
 }
 
-/** Trigger a browser download of the invoice PDF. */
-export function downloadInvoicePdf(inv: InvoiceModel, config: HospitalConfig): Promise<void> {
-  return new Promise((resolve) => {
-    pdfMake.createPdf(buildInvoiceDoc(inv, config)).download(`Invoice_${inv.invoiceNumber || inv.id}.pdf`, () => resolve());
+/** Trigger a browser download of the invoice PDF (embeds the lab logo if set). */
+export async function downloadInvoicePdf(inv: InvoiceModel, config: HospitalConfig): Promise<void> {
+  const logo = await fetchAsDataUrl(cfg(config, "logo_url", "logoUrl") || undefined);
+  await new Promise<void>((resolve) => {
+    pdfMake.createPdf(buildInvoiceDoc(inv, config, logo)).download(`Invoice_${inv.invoiceNumber || inv.id}.pdf`, () => resolve());
   });
 }

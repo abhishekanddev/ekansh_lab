@@ -1,7 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, Plus, Stethoscope, User } from "lucide-react";
 import { useReferrers, useAddReferrer } from "../../hooks/useLabData";
 import type { Referrer } from "../../lib/types";
+
+/** Synthetic SELF entry, always available even before any referrer is saved. */
+const SELF: Referrer = { id: "SELF", name: "SELF", isSelf: true };
 
 /** Human-readable display name for a referrer — mirrors Flutter ReferrerModel. */
 export function referrerDisplayName(r: Referrer): string {
@@ -13,7 +16,8 @@ export function referrerDisplayName(r: Referrer): string {
 /**
  * Autocomplete for selecting a referrer (doctor) — search-as-you-type from the
  * `referrers` collection, SELF quick-select, and inline "Add New Doctor".
- * Ports `referred_by_field.dart`.
+ * Ports `referred_by_field.dart`. Closes on outside-click (not blur) so the
+ * dropdown no longer flickers when interacting with it.
  */
 export function ReferredByField({
   selected,
@@ -28,17 +32,33 @@ export function ReferredByField({
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
-  const filtered = useMemo(() => {
+  // Close when clicking anywhere outside the field/dropdown.
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setAdding(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  const options = useMemo(() => {
     const list = referrers.data ?? [];
+    const hasSelf = list.some((r) => r.isSelf);
+    const withSelf = hasSelf ? list : [SELF, ...list];
     const ql = q.trim().toLowerCase();
-    if (!ql) return list;
-    return list.filter((r) => referrerDisplayName(r).toLowerCase().includes(ql) || (r.name ?? "").toLowerCase().includes(ql));
+    if (!ql) return withSelf;
+    return withSelf.filter((r) => referrerDisplayName(r).toLowerCase().includes(ql) || (r.name ?? "").toLowerCase().includes(ql));
   }, [referrers.data, q]);
 
   function choose(r: Referrer) {
     onSelect(r);
-    setQ(referrerDisplayName(r));
+    setQ("");
     setOpen(false);
     setAdding(false);
   }
@@ -49,7 +69,7 @@ export function ReferredByField({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapRef}>
       <label className="label">Referred by (Doctor)</label>
       <div className="relative">
         <input
@@ -57,12 +77,12 @@ export function ReferredByField({
           value={selected ? referrerDisplayName(selected) : q}
           placeholder="Search or type doctor name…"
           onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
           onChange={(e) => { onSelect(null); setQ(e.target.value); setOpen(true); }}
-          onBlur={() => setTimeout(() => setOpen(false), 180)}
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-faint)]">
           {selected ? (
-            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={clear} title="Clear"><X size={16} /></button>
+            <button type="button" onClick={clear} title="Clear"><X size={16} /></button>
           ) : (
             <Search size={16} />
           )}
@@ -83,11 +103,10 @@ export function ReferredByField({
           ) : (
             <>
               {referrers.isLoading && <div className="px-4 py-3 text-[13px] text-[var(--color-muted)]">Loading…</div>}
-              {filtered.map((r) => (
+              {options.map((r) => (
                 <button
                   key={r.id}
                   type="button"
-                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => choose(r)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-[var(--color-bg)] border-b border-[var(--color-border)] last:border-0"
                 >
@@ -103,7 +122,6 @@ export function ReferredByField({
               ))}
               <button
                 type="button"
-                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setAdding(true)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-[var(--color-bg)] text-[var(--color-primary-600)] font-medium text-[13px]"
               >
@@ -133,7 +151,7 @@ function AddDoctorForm({
   const [reg, setReg] = useState("");
 
   return (
-    <div className="p-3 space-y-2" onMouseDown={(e) => e.preventDefault()}>
+    <div className="p-3 space-y-2">
       <div className="text-[12px] font-semibold uppercase tracking-wider text-[var(--color-faint)]">Add new doctor</div>
       <input className="input h-9" placeholder="Doctor name *" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
       <input className="input h-9" placeholder="Specialization" value={spec} onChange={(e) => setSpec(e.target.value)} />

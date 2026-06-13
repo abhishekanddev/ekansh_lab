@@ -175,6 +175,21 @@ export function NewReport() {
           {/* Patient form */}
           <div className="card p-5 space-y-3 h-fit">
             <h3 className="font-semibold">Patient details</h3>
+            {/* Phone first — entering it looks up an existing patient and prefills the rest. */}
+            <Field label="Phone number">
+              <div className="relative">
+                <input className="input pr-9" inputMode="numeric" value={patient.phone} autoFocus onChange={(e) => setPatient({ ...patient, phone: e.target.value })} placeholder="Enter 10-digit number first" />
+                {existing.isFetching && <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[var(--color-primary-300)] border-t-[var(--color-primary-600)] rounded-full animate-spin" />}
+                {!existing.isFetching && normalizePhone(patient.phone).length === 10 && existing.data && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-success)]" title="Existing patient"><UserCheck size={16} /></span>
+                )}
+              </div>
+            </Field>
+            {normalizePhone(patient.phone).length === 10 && existing.data && (
+              <div className="flex items-center gap-2 text-[12px] text-[var(--color-success)] -mt-1">
+                <UserCheck size={13} /> Existing patient found — details prefilled{existing.data.uhid ? ` · ${existing.data.uhid}` : ""}.
+              </div>
+            )}
             <Field label="Full name *"><input className="input" value={patient.name} onChange={(e) => setPatient({ ...patient, name: e.target.value })} /></Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Age"><input className="input" value={patient.age} onChange={(e) => setPatient({ ...patient, age: e.target.value })} /></Field>
@@ -191,25 +206,9 @@ export function NewReport() {
                 </select>
               </Field>
             )}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Phone">
-                <div className="relative">
-                  <input className="input pr-9" value={patient.phone} onChange={(e) => setPatient({ ...patient, phone: e.target.value })} placeholder="10-digit number" />
-                  {existing.isFetching && <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[var(--color-primary-300)] border-t-[var(--color-primary-600)] rounded-full animate-spin" />}
-                  {!existing.isFetching && normalizePhone(patient.phone).length === 10 && existing.data && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-success)]" title="Existing patient"><UserCheck size={16} /></span>
-                  )}
-                </div>
-              </Field>
-              <Field label="UHID">
-                <input className="input bg-[var(--color-bg)] text-[var(--color-muted)]" value={patient.uhid} readOnly placeholder="Auto on save" title="Auto-generated (EP-0001)" />
-              </Field>
-            </div>
-            {normalizePhone(patient.phone).length === 10 && existing.data && (
-              <div className="flex items-center gap-2 text-[12px] text-[var(--color-success)] -mt-1">
-                <UserCheck size={13} /> Existing patient found — details prefilled{existing.data.uhid ? ` · ${existing.data.uhid}` : ""}.
-              </div>
-            )}
+            <Field label="UHID">
+              <input className="input bg-[var(--color-bg)] text-[var(--color-muted)]" value={patient.uhid} readOnly placeholder="Auto on save" title="Auto-generated (EP-0001)" />
+            </Field>
             <ReferredByField selected={referrer} onSelect={setReferrer} />
           </div>
 

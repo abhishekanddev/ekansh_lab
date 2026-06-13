@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Beaker, Lock, ShieldCheck } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth";
 type Mode = "signin" | "signup";
 
 export function Login() {
-  const { signIn, signUp } = useAuth();
+  const { user, signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -14,6 +14,13 @@ export function Login() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Where to land once the auth state actually resolves (avoids navigating
+  // before onAuthStateChanged sets the user, which bounced back to login).
+  const [pending, setPending] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user && pending) navigate(pending, { replace: true });
+  }, [user, pending, navigate]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,16 +35,21 @@ export function Login() {
     }
     setBusy(true);
     try {
-      if (mode === "signup") await signUp(email, password);
-      else await signIn(email, password);
-      navigate("/app/dashboard");
+      if (mode === "signup") {
+        await signUp(email, password);
+        // New labs start on Report Settings to configure branding.
+        setPending("/app/config");
+      } else {
+        await signIn(email, password);
+        setPending("/app/dashboard");
+      }
+      // Keep busy=true; the effect navigates once the user resolves.
     } catch (err: any) {
       const code = err?.code as string | undefined;
       if (code === "auth/email-already-in-use") setError("This email is already registered. Please sign in.");
       else if (code === "auth/invalid-credential" || code === "auth/wrong-password") setError("Invalid email or password.");
       else if (code === "auth/user-not-found") setError("No account found.");
       else setError(err?.message || "Authentication failed");
-    } finally {
       setBusy(false);
     }
   }

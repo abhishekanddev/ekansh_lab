@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, FilePlus2, FileText, FlaskConical, Users, Receipt,
@@ -24,6 +24,7 @@ const NAV = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const initials = (user?.name || "U").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
   return (
@@ -102,11 +103,27 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="block font-semibold text-[13px]">{user?.name}</span>
               <span className="block text-[11px] text-[var(--color-muted)] capitalize">{user?.role || "staff"}</span>
             </span>
-            <button onClick={() => signOut()} title="Sign out" className="ml-1 w-9 h-9 grid place-items-center border border-[var(--color-border)] rounded-md text-[var(--color-muted)] hover:bg-[var(--color-bg)]">
+            <button onClick={() => setConfirmLogout(true)} title="Sign out" className="ml-1 w-9 h-9 grid place-items-center border border-[var(--color-border)] rounded-md text-[var(--color-muted)] hover:bg-[var(--color-bg)]">
               <LogOut size={16} />
             </button>
           </div>
         </header>
+
+        {confirmLogout && (
+          <div className="fixed inset-0 z-50 bg-black/30 grid place-items-center p-4" onClick={() => setConfirmLogout(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="w-10 h-10 grid place-items-center rounded-full bg-[var(--color-danger-50,#fef2f2)] text-[var(--color-danger)]"><LogOut size={18} /></span>
+                <h3 className="font-semibold text-[16px]">Sign out?</h3>
+              </div>
+              <p className="text-[13px] text-[var(--color-muted)] mb-4">You'll need to sign in again to access your lab.</p>
+              <div className="flex justify-end gap-2">
+                <button className="btn btn-secondary" onClick={() => setConfirmLogout(false)}>Cancel</button>
+                <button className="btn btn-danger" onClick={() => { setConfirmLogout(false); signOut(); }}>Sign out</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <main className="flex-1 p-6">{children}</main>
       </div>

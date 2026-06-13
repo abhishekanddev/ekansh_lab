@@ -30,14 +30,29 @@ export function ReportConfig() {
   const str = (key: string) => (form[key] as string) ?? "";
   const layout = (form.report_layout_mode as LayoutMode) || "digital";
 
+  const num = (key: string, fallback?: number) => {
+    const v = form[key];
+    if (v === "" || v === undefined || v === null) return fallback;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
   async function onSave() {
     const patch: Form = {
       ...form,
       report_layout_mode: layout,
       use_manual_header_footer: layout === "image",
       enable_gst: !!form.enable_gst,
-      gst_percentage: form.gst_percentage === "" || form.gst_percentage === undefined ? undefined : Number(form.gst_percentage),
+      gst_percentage: num("gst_percentage"),
       invoice_prefix: str("invoice_prefix").trim() || "INV",
+      // Preprinted margins/toggles — stored as numbers/bools to match Flutter.
+      preprinted_top_mm: num("preprinted_top_mm", 55),
+      preprinted_bottom_mm: num("preprinted_bottom_mm", 35),
+      preprinted_left_mm: num("preprinted_left_mm", 12),
+      preprinted_right_mm: num("preprinted_right_mm", 12),
+      preprinted_first_page_top_mm: num("preprinted_first_page_top_mm"),
+      preprinted_show_signatures: form.preprinted_show_signatures !== false,
+      preprinted_show_page_numbers: form.preprinted_show_page_numbers !== false,
     };
     await save.mutateAsync(patch);
     setSaved(true);
@@ -64,9 +79,14 @@ export function ReportConfig() {
 
       <div className="space-y-4 max-w-3xl">
         <Card icon={<Building2 size={17} />} title="Lab Profile">
-          <div className="grid gap-3">
-            {field("name", "Lab name", "e.g. City Diagnostics & Pathology")}
-            {field("address", "Address", "e.g. 12, Civil Lines, Hardoi, UP – 241001", { col: true })}
+          <div className="grid sm:grid-cols-[1fr_auto] gap-3 items-start">
+            <div className="grid gap-3">
+              {field("name", "Lab name", "e.g. City Diagnostics & Pathology")}
+              {field("address", "Address", "e.g. 12, Civil Lines, Hardoi, UP – 241001", { col: true })}
+            </div>
+            <div className="w-40">
+              <ImageUpload label="Logo" field="logo_url" url={str("logo_url")} onChange={(u) => set("logo_url", u)} />
+            </div>
           </div>
         </Card>
 
@@ -86,6 +106,13 @@ export function ReportConfig() {
                 {field("preprinted_bottom_mm", "Bottom", "35", { type: "number" })}
                 {field("preprinted_left_mm", "Left", "12", { type: "number" })}
                 {field("preprinted_right_mm", "Right", "12", { type: "number" })}
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3 mt-3">
+                {field("preprinted_first_page_top_mm", "First-page top (mm)", "Same as top if blank", { type: "number" })}
+              </div>
+              <div className="mt-3 space-y-3">
+                <Toggle label="Print signatures" subtitle="Off if your letterhead already has them" value={form.preprinted_show_signatures !== false} onChange={(v) => set("preprinted_show_signatures", v)} />
+                <Toggle label="Print page numbers" subtitle='"Page 1 of N" on each page' value={form.preprinted_show_page_numbers !== false} onChange={(v) => set("preprinted_show_page_numbers", v)} />
               </div>
             </div>
           )}
@@ -118,8 +145,9 @@ export function ReportConfig() {
             {field("lab_technician_qualification", "Qualification", "DMLT")}
             {field("lab_technician_reg_no", "Reg. no.", "DMLT-UP-123")}
           </div>
-          <div className="mt-3 max-w-xs">
+          <div className="grid sm:grid-cols-2 gap-3 mt-3">
             <ImageUpload label="Signature" field="technician_signature_url" url={str("technician_signature_url")} onChange={(u) => set("technician_signature_url", u)} />
+            <ImageUpload label="Stamp / Seal" field="stamp_image_url" url={str("stamp_image_url")} onChange={(u) => set("stamp_image_url", u)} />
           </div>
         </Card>
 
@@ -128,6 +156,7 @@ export function ReportConfig() {
             {field("footer_line_1", "Line 1 (dark banner)", "NOT VALID FOR MEDICO LEGAL PURPOSE", { col: true })}
             {field("footer_line_2", "Line 2", "For Home Collection: 9794423233", { col: true })}
             {field("footer_line_3", "Line 3 (fine print)", "Please correlate clinically…", { col: true })}
+            {field("report_disclaimer", "Report disclaimer", "Results relate only to the sample tested…", { col: true })}
           </div>
         </Card>
 
