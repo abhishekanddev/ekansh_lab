@@ -99,17 +99,25 @@ function patientGrid(report: LabReport): Content {
   };
 }
 
+/** Read a config value preferring Flutter's snake_case key, then camelCase. */
+function cfg(config: HospitalConfig, snake: string, camel?: string): string | undefined {
+  const v = (config[snake] ?? (camel ? config[camel] : undefined)) as unknown;
+  return v == null || v === "" ? undefined : String(v);
+}
+
 async function header(config: HospitalConfig, verifyUrl: string): Promise<Content> {
   const qr = await QRCode.toDataURL(verifyUrl, { margin: 0, width: 120 });
-  const name = (config.hospital_name || config.name || "Diagnostic Laboratory") as string;
+  const name = cfg(config, "name", "hospital_name") || "Diagnostic Laboratory";
+  const subtitle = cfg(config, "report_header_subtitle", "reportHeaderSubtitle");
+  const address = cfg(config, "address");
   return {
     columns: [
       {
         width: "*",
         stack: [
           { text: name, style: "labName" },
-          ...(config.address ? [{ text: config.address as string, style: "labAddr" }] : []),
-          ...(config.reportHeaderSubtitle ? [{ text: config.reportHeaderSubtitle as string, style: "labAddr" }] : []),
+          ...(address ? [{ text: address, style: "labAddr" }] : []),
+          ...(subtitle ? [{ text: subtitle, style: "labAddr" }] : []),
         ],
       },
       { width: 56, image: qr, fit: [56, 56] },
@@ -129,18 +137,23 @@ function footer(config: HospitalConfig): Content {
     ],
     alignment: "center",
   });
-  const lines = [config.footerLine1, config.footerLine2, config.footerLine3].filter(Boolean) as string[];
+  const lines = [
+    cfg(config, "footer_line_1", "footerLine1"),
+    cfg(config, "footer_line_2", "footerLine2"),
+    cfg(config, "footer_line_3", "footerLine3"),
+  ].filter(Boolean) as string[];
+  const wish = cfg(config, "wish_text", "wishText");
   return {
     margin: [0, 16, 0, 0],
     stack: [
       {
         columns: [
-          sig(config.labTechnicianName, config.labTechnicianQualification, config.labTechnicianRegNo, config.technicianSignatureUrl),
-          sig(config.pathologistName, config.pathologistQualification, config.pathologistRegNo, config.pathologistSignatureUrl),
+          sig(cfg(config, "lab_technician_name", "labTechnicianName"), cfg(config, "lab_technician_qualification", "labTechnicianQualification"), cfg(config, "lab_technician_reg_no", "labTechnicianRegNo"), cfg(config, "technician_signature_url", "technicianSignatureUrl")),
+          sig(cfg(config, "pathologist_name", "pathologistName"), cfg(config, "pathologist_qualification", "pathologistQualification"), cfg(config, "pathologist_reg_no", "pathologistRegNo"), cfg(config, "pathologist_signature_url", "pathologistSignatureUrl")),
         ],
       },
       ...(lines.length ? [{ text: lines.join("  •  "), alignment: "center", fontSize: 8, color: MUTED, margin: [0, 8, 0, 0] } as Content] : []),
-      ...(config.wishText ? [{ text: config.wishText as string, alignment: "center", italics: true, fontSize: 8, color: MUTED, margin: [0, 2, 0, 0] } as Content] : []),
+      ...(wish ? [{ text: wish, alignment: "center", italics: true, fontSize: 8, color: MUTED, margin: [0, 2, 0, 0] } as Content] : []),
     ],
   };
 }

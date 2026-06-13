@@ -10,10 +10,12 @@ import {
   limit as fbLimit,
   where,
   serverTimestamp,
+  runTransaction,
 } from "firebase/firestore";
 import { useHospitalId } from "../lib/auth";
 import { collection } from "firebase/firestore";
 import { hospitalCol, hospitalDoc, hospitalRef, COL, requireDb } from "../lib/db";
+import { normalizePhone } from "../lib/reportBuilder";
 import type {
   LabReport,
   LabPatient,
@@ -189,13 +191,99 @@ export function useSavePatient() {
   });
 }
 
+/** Look up an existing patient by phone (lab_patients doc id = 10-digit phone). */
+export function usePatientByPhone(phone?: string) {
+  const hid = useHospitalId();
+  const clean = normalizePhone(phone ?? "");
+  return useQuery({
+    queryKey: ["patientByPhone", hid, clean],
+    enabled: !!hid && clean.length === 10,
+    queryFn: async () => {
+      const snap = await getDoc(hospitalDoc(hid!, COL.patients, clean));
+      return snap.exists() ? ({ id: snap.id, ...snap.data() } as LabPatient) : null;
+    },
+  });
+}
+
+/**
+ * Upsert a patient by phone and return their UHID, generating a sequential
+ * `EP-0001` via the `uhid_counter` in a transaction — mirrors the Flutter
+ * `LabPatientService.saveOrUpdatePatient`. Reuses an existing UHID when set.
+ */
+export function useUpsertPatientUhid() {
+  const hid = useHospitalId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: { phone: string; name: string; age: string; gender: string }) => {
+      const phone = normalizePhone(p.phone);
+      if (phone.length < 10) return null;
+      const dbi = requireDb();
+      const patientRef = hospitalDoc(hid!, COL.patients, phone);
+      const counterRef = hospitalDoc(hid!, COL.counters, "uhid_counter");
+
+      return await runTransaction(dbi, async (tx) => {
+        const snap = await tx.get(patientRef);
+        const genUhid = async (): Promise<string> => {
+          const cs = await tx.get(counterRef);
+          const last = cs.exists() ? ((cs.data().lastNumber as number) ?? 0) : 0;
+          const next = last + 1;
+          tx.set(counterRef, { lastNumber: next }, { merge: true });
+          return `EP-${String(next).padStart(4, "0")}`;
+        };
+
+        if (snap.exists()) {
+          const data = snap.data();
+          const existing = (data.uhid as string | undefined) ?? "";
+          const uhid = existing || (await genUhid());
+          tx.update(patientRef, {
+            name: p.name, age: p.age, gender: p.gender,
+            lastVisit: serverTimestamp(),
+            totalVisits: ((data.totalVisits as number) ?? 1) + 1,
+            ...(existing ? {} : { uhid }),
+          });
+          return uhid;
+        }
+        const uhid = await genUhid();
+        tx.set(patientRef, {
+          id: phone, hospitalId: hid, phone, name: p.name, age: p.age, gender: p.gender,
+          lastVisit: serverTimestamp(), totalVisits: 1, uhid, registrationDate: serverTimestamp(),
+        });
+        return uhid;
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["patients", hid] }),
+  });
+}
+
 /* ── Referrers ──────────────────────────────────────────────────────────── */
 export function useReferrers() {
   const hid = useHospitalId();
   return useQuery({
     queryKey: ["referrers", hid],
     enabled: !!hid,
-    queryFn: async () => rows<Referrer>(await getDocs(hospitalCol(hid!, COL.referrers))),
+    queryFn: async () => {
+      const list = rows<Referrer>(await getDocs(hospitalCol(hid!, COL.referrers)));
+      // SELF first, then alphabetical — matches Flutter ordering.
+      return list.sort((a, b) => {
+        if (a.isSelf && !b.isSelf) return -1;
+        if (!a.isSelf && b.isSelf) return 1;
+        return (a.name ?? "").toLowerCase().localeCompare((b.name ?? "").toLowerCase());
+      });
+    },
+  });
+}
+
+/** Add a new referrer (doctor); returns the new doc id. */
+export function useAddReferrer() {
+  const hid = useHospitalId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (r: Omit<Referrer, "id">) => {
+      const ref = fbDoc(hospitalCol(hid!, COL.referrers));
+      await setDoc(ref, { ...r, id: ref.id, createdAt: serverTimestamp() });
+      return ref.id;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["referrers", hid] }),
   });
 }
 

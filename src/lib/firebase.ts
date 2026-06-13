@@ -1,6 +1,6 @@
 import { initializeApp, type FirebaseApp } from "firebase/app";
 import { getAuth, connectAuthEmulator, type Auth } from "firebase/auth";
-import { getFirestore, connectFirestoreEmulator, type Firestore } from "firebase/firestore";
+import { initializeFirestore, connectFirestoreEmulator, type Firestore } from "firebase/firestore";
 import { getStorage, connectStorageEmulator, type FirebaseStorage } from "firebase/storage";
 import { getFunctions, connectFunctionsEmulator, type Functions } from "firebase/functions";
 
@@ -28,7 +28,9 @@ let functions: Functions | null = null;
 if (firebaseReady) {
   app = initializeApp(cfg);
   auth = getAuth(app);
-  db = getFirestore(app);
+  // ignoreUndefinedProperties: skip undefined fields instead of throwing
+  // "Unsupported field value: undefined" on setDoc (e.g. optional result fields).
+  db = initializeFirestore(app, { ignoreUndefinedProperties: true });
   storage = getStorage(app);
   functions = getFunctions(app, region);
 

@@ -1,34 +1,52 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, Search, Save } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Search, Save, UserCheck } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { ResultEntry } from "../components/report/ResultEntry";
+import { ReferredByField, referrerDisplayName } from "../components/report/ReferredByField";
 import { LAB_TEST_TEMPLATES, TEST_CATEGORIES, type CyclePhase } from "../data/labTestTemplates";
 import { buildInitialResults, genId, normalizePhone } from "../lib/reportBuilder";
 import { CYCLE_PHASE_LABELS } from "../lib/labLogic";
-import type { LabParameter } from "../lib/types";
-import { useSaveReport, useSavePatient, useTestCatalog } from "../hooks/useLabData";
-import { useAuth } from "../lib/auth";
+import type { LabParameter, Referrer } from "../lib/types";
+import { useSaveReport, useUpsertPatientUhid, usePatientByPhone, useTestCatalog } from "../hooks/useLabData";
 import { serverTimestamp } from "firebase/firestore";
 
 interface Patient {
   name: string; age: string; gender: string; phone: string;
-  cyclePhase: CyclePhase; referredBy: string; uhid: string;
+  cyclePhase: CyclePhase; uhid: string;
 }
 
 const STEPS = ["Patient & Tests", "Enter Results", "Review & Save"] as const;
 
 export function NewReport() {
   const nav = useNavigate();
-  const { user } = useAuth();
   const catalog = useTestCatalog();
   const saveReport = useSaveReport();
-  const savePatient = useSavePatient();
+  const upsertPatient = useUpsertPatientUhid();
 
   const [step, setStep] = useState(0);
   const [patient, setPatient] = useState<Patient>({
-    name: "", age: "", gender: "", phone: "", cyclePhase: "notApplicable", referredBy: "", uhid: "",
+    name: "", age: "", gender: "", phone: "", cyclePhase: "notApplicable", uhid: "",
   });
+  const [referrer, setReferrer] = useState<Referrer | null>(null);
+
+  // ── Existing-patient lookup by phone (mirrors Flutter getPatientByPhone) ──
+  const existing = usePatientByPhone(patient.phone);
+  const [appliedPhone, setAppliedPhone] = useState("");
+  useEffect(() => {
+    const found = existing.data;
+    const clean = normalizePhone(patient.phone);
+    if (found && clean.length === 10 && appliedPhone !== clean) {
+      setPatient((p) => ({
+        ...p,
+        name: p.name || found.name || "",
+        age: p.age || (found.age ?? ""),
+        gender: p.gender || (found.gender ?? ""),
+        uhid: found.uhid ?? p.uhid,
+      }));
+      setAppliedPhone(clean);
+    }
+  }, [existing.data, patient.phone, appliedPhone]);
   const [selected, setSelected] = useState<string[]>([]);
   const [resultsMap, setResultsMap] = useState<Record<string, LabParameter[]>>({});
   const [activeTest, setActiveTest] = useState<string>("");
@@ -78,12 +96,26 @@ export function NewReport() {
     try {
       const phone = normalizePhone(patient.phone);
       const id = genId();
+
+      // Upsert patient first to obtain/generate the sequential UHID (EP-0001),
+      // exactly as the Flutter app does, so the report carries the same patientId.
+      let uhid = patient.uhid;
+      if (phone) {
+        const generated = await upsertPatient.mutateAsync({
+          phone, name: patient.name, age: patient.age, gender: patient.gender,
+        });
+        if (generated) uhid = generated;
+      }
+
+      const referredBy = referrer ? referrerDisplayName(referrer) : "";
       const formData = { age: patient.age, gender: patient.gender, phone };
       const base = {
         id,
         patientName: patient.name,
         phone,
-        referredBy: patient.referredBy,
+        patientId: uhid || undefined,
+        referredBy,
+        referredById: referrer?.id,
         formData,
         price: totalPrice,
         createdAt: serverTimestamp(),
@@ -110,13 +142,6 @@ export function NewReport() {
         });
       }
 
-      if (phone) {
-        await savePatient.mutateAsync({
-          id: phone, phone, name: patient.name, age: patient.age, gender: patient.gender,
-          uhid: patient.uhid || undefined, hospitalId: user?.hospitalId ?? undefined,
-          lastVisit: serverTimestamp(),
-        });
-      }
       nav("/app/reports");
     } finally {
       setSaving(false);
@@ -167,10 +192,25 @@ export function NewReport() {
               </Field>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Phone"><input className="input" value={patient.phone} onChange={(e) => setPatient({ ...patient, phone: e.target.value })} /></Field>
-              <Field label="UHID"><input className="input" value={patient.uhid} onChange={(e) => setPatient({ ...patient, uhid: e.target.value })} /></Field>
+              <Field label="Phone">
+                <div className="relative">
+                  <input className="input pr-9" value={patient.phone} onChange={(e) => setPatient({ ...patient, phone: e.target.value })} placeholder="10-digit number" />
+                  {existing.isFetching && <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[var(--color-primary-300)] border-t-[var(--color-primary-600)] rounded-full animate-spin" />}
+                  {!existing.isFetching && normalizePhone(patient.phone).length === 10 && existing.data && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-success)]" title="Existing patient"><UserCheck size={16} /></span>
+                  )}
+                </div>
+              </Field>
+              <Field label="UHID">
+                <input className="input bg-[var(--color-bg)] text-[var(--color-muted)]" value={patient.uhid} readOnly placeholder="Auto on save" title="Auto-generated (EP-0001)" />
+              </Field>
             </div>
-            <Field label="Referred by"><input className="input" value={patient.referredBy} onChange={(e) => setPatient({ ...patient, referredBy: e.target.value })} placeholder="Self / Dr. …" /></Field>
+            {normalizePhone(patient.phone).length === 10 && existing.data && (
+              <div className="flex items-center gap-2 text-[12px] text-[var(--color-success)] -mt-1">
+                <UserCheck size={13} /> Existing patient found — details prefilled{existing.data.uhid ? ` · ${existing.data.uhid}` : ""}.
+              </div>
+            )}
+            <ReferredByField selected={referrer} onSelect={setReferrer} />
           </div>
 
           {/* Test selection */}
@@ -231,7 +271,7 @@ export function NewReport() {
             <Dt label="Patient" value={patient.name} />
             <Dt label="Age / Sex" value={[patient.age, patient.gender].filter(Boolean).join(" / ") || "—"} />
             <Dt label="Phone" value={patient.phone || "—"} />
-            <Dt label="Referred by" value={patient.referredBy || "—"} />
+            <Dt label="Referred by" value={referrer ? referrerDisplayName(referrer) : "—"} />
             <Dt label="Tests" value={selected.join(", ")} />
             <Dt label="Total" value={"₹" + totalPrice.toLocaleString("en-IN")} />
           </dl>

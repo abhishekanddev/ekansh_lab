@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil, Check as CheckIcon } from "lucide-react";
 import type { LabParameter } from "../../lib/types";
 import { computeFlag } from "../../lib/labLogic";
 import { gridSummary, resultSections } from "../../lib/reportBuilder";
@@ -95,13 +95,7 @@ export function ResultEntry({
                       </td>
                       <td className="px-3 py-2 text-[var(--color-muted)] text-[13px]">{r.unit}</td>
                       <td className="px-3 py-2">
-                        <input
-                          className="input h-8 num text-[13px] w-[130px]"
-                          value={r.range}
-                          onChange={(e) => setRange(i, e.target.value)}
-                          placeholder="e.g. 70-110"
-                          title="Editable reference range"
-                        />
+                        <RangeCell value={r.range} onChange={(v) => setRange(i, v)} />
                       </td>
                       <td className="px-3 py-2"><FlagBadge flag={r.flag} /></td>
                       <td className="px-1 py-2">
@@ -126,6 +120,49 @@ export function ResultEntry({
       ))}
 
       <AddParamForm sections={sectionOptions} onAdd={addParam} />
+    </div>
+  );
+}
+
+/** Reference range cell: shows the range as text with a pencil; clicking the
+ * pencil reveals an inline editor (mirrors Flutter's edit-range affordance). */
+function RangeCell({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  function save() {
+    onChange(draft.trim());
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          className="input h-8 num text-[13px] w-[110px]"
+          value={draft}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
+          placeholder="e.g. 70-110"
+        />
+        <button type="button" onClick={save} title="Save range" className="text-[var(--color-success)] hover:opacity-70 p-0.5">
+          <CheckIcon size={15} />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5 group">
+      <span className="num text-[13px] text-[var(--color-muted)]">{value || "—"}</span>
+      <button
+        type="button"
+        onClick={() => { setDraft(value); setEditing(true); }}
+        title="Edit reference range"
+        className="text-[var(--color-faint)] hover:text-[var(--color-primary-600)] opacity-0 group-hover:opacity-100 p-0.5"
+      >
+        <Pencil size={12} />
+      </button>
     </div>
   );
 }
