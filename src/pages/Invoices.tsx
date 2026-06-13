@@ -1,15 +1,27 @@
 import { useMemo, useState } from "react";
-import { Plus, X, Trash2, Receipt } from "lucide-react";
+import { Plus, X, Trash2, Receipt, Download } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Spinner, EmptyState } from "../components/ui";
-import { useInvoices } from "../hooks/useLabData";
+import { useInvoices, useHospitalConfig } from "../hooks/useLabData";
 import { useCreateInvoice, type CreateInvoiceInput } from "../hooks/useInvoices";
+import { downloadInvoicePdf } from "../lib/pdf/invoicePdf";
 import { fmtDate, fmtMoney } from "../lib/format";
-import type { InvoiceLineItem } from "../lib/types";
+import type { InvoiceLineItem, InvoiceModel } from "../lib/types";
 
 export function Invoices() {
   const invoices = useInvoices();
+  const config = useHospitalConfig();
   const [open, setOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function downloadPdf(inv: InvoiceModel) {
+    setBusyId(inv.id);
+    try {
+      await downloadInvoicePdf(inv, config.data ?? {});
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div>
@@ -34,6 +46,7 @@ export function Invoices() {
                 <th className="font-semibold px-4 py-2.5">Date</th>
                 <th className="font-semibold px-4 py-2.5">Payment</th>
                 <th className="font-semibold px-4 py-2.5 text-right">Amount</th>
+                <th className="font-semibold px-4 py-2.5 text-right">PDF</th>
               </tr>
             </thead>
             <tbody>
@@ -44,6 +57,12 @@ export function Invoices() {
                   <td className="px-4 py-3 num text-[var(--color-muted)]">{fmtDate(inv.date)}</td>
                   <td className="px-4 py-3 text-[var(--color-muted)]">{inv.paymentMode}</td>
                   <td className="px-4 py-3 text-right num font-semibold">{fmtMoney(inv.finalBillAmount)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => downloadPdf(inv)} disabled={busyId === inv.id} title="Download bill PDF"
+                      className="w-8 h-8 grid place-items-center rounded-md border border-[var(--color-border)] text-[var(--color-muted)] hover:bg-white ml-auto">
+                      <Download size={15} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
