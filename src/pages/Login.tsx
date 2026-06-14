@@ -9,6 +9,9 @@ export function Login() {
   const { user, signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("signin");
+  const [name, setName] = useState("");
+  const [orgName, setOrgName] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -33,10 +36,14 @@ export function Login() {
       setError("Password must be at least 6 characters.");
       return;
     }
+    if (mode === "signup" && (!name.trim() || !orgName.trim() || !phone.trim())) {
+      setError("Please fill in your name, lab name, and phone number.");
+      return;
+    }
     setBusy(true);
     try {
       if (mode === "signup") {
-        await signUp(email, password);
+        await signUp({ name, email, password, orgName, orgType: "lab", phone });
         // New labs land on the email-verification gate until they click the link;
         // RequireAuth bounces unverified users to /app/verify-email anyway, but
         // setting it here avoids a flash through /app/config.
@@ -92,6 +99,25 @@ export function Login() {
           </p>
 
           <form onSubmit={onSubmit} className="space-y-4">
+            {mode === "signup" && (
+              <>
+                <div>
+                  <label className="label">Your name</label>
+                  <input className="input" type="text" autoComplete="name" required
+                    value={name} onChange={(e) => setName(e.target.value)} placeholder="Dr. A. Sharma" />
+                </div>
+                <div>
+                  <label className="label">Lab / Hospital name</label>
+                  <input className="input" type="text" required
+                    value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="Sharma Diagnostics" />
+                </div>
+                <div>
+                  <label className="label">Phone</label>
+                  <input className="input" type="tel" autoComplete="tel" required
+                    value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="9876543210" />
+                </div>
+              </>
+            )}
             <div>
               <label className="label">Email</label>
               <input className="input" type="email" autoComplete="username" required

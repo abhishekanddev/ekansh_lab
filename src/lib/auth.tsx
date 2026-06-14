@@ -4,12 +4,54 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendEmailVerification,
+  updateProfile,
   signOut as fbSignOut,
   type User,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions, firebaseReady } from "./firebase";
+
+/** Org details collected at signup, mirroring the Flutter signup form. */
+export interface SignUpParams {
+  name: string;
+  email: string;
+  password: string;
+  orgName: string;
+  /** "lab" | "hospital" — matches OrgType.firestoreValue in Flutter. */
+  orgType: string;
+  phone: string;
+}
+
+/** Persist the org details across the email-verification round-trip so the
+ *  account can be auto-activated after the user clicks the link (which may open
+ *  a fresh tab / reload). Mirrors Flutter's in-memory pendingOrg* state. */
+const PENDING_ORG_KEY = "ekansh_pending_org";
+type PendingOrg = { orgName: string; orgType: string; phone: string };
+function savePendingOrg(p: PendingOrg) {
+  try { localStorage.setItem(PENDING_ORG_KEY, JSON.stringify(p)); } catch { /* ignore */ }
+}
+function loadPendingOrg(): PendingOrg | null {
+  try {
+    const raw = localStorage.getItem(PENDING_ORG_KEY);
+    return raw ? (JSON.parse(raw) as PendingOrg) : null;
+  } catch { return null; }
+}
+function clearPendingOrg() {
+  try { localStorage.removeItem(PENDING_ORG_KEY); } catch { /* ignore */ }
+}
+
+/** Call the `activateVerifiedAccount` Cloud Function (Admin SDK) to create the
+ *  hospital + user docs. Direct client writes are blocked by Firestore rules. */
+async function activateAccount(org: PendingOrg): Promise<string> {
+  if (!functions) throw new Error("Firebase not configured");
+  const activate = httpsCallable<PendingOrg, { success: boolean; hospitalId: string }>(
+    functions,
+    "activateVerifiedAccount",
+  );
+  const res = await activate(org);
+  return res.data.hospitalId;
+}
 
 export interface SessionUser {
   uid: string;
@@ -28,7 +70,7 @@ interface AuthState {
   loading: boolean;
   firebaseReady: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (params: SignUpParams) => Promise<void>;
   signOut: () => Promise<void>;
   /** Resend the verification email to the currently-signed-in user. */
   resendVerification: () => Promise<void>;
@@ -94,11 +136,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password);
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (params: SignUpParams) => {
     if (!auth) throw new Error("Firebase not configured");
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    const { name, email, password, orgName, orgType, phone } = params;
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+
+    // Set the display name (non-critical).
+    try { await updateProfile(cred.user, { displayName: name.trim() }); } catch { /* non-fatal */ }
+
     // Mirror Flutter: send a verification link immediately on signup.
     try { await sendEmailVerification(cred.user); } catch { /* non-fatal */ }
+
+    // Mirror Flutter: attempt a pending users/{uid} doc. Firestore rules block
+    // client writes to /users, so this is expected to fail — the real doc is
+    // created by activateVerifiedAccount after verification. Harmless either way.
+    if (db) {
+      try {
+        await setDoc(doc(db, "users", cred.user.uid), {
+          name: name.trim(),
+          email: email.trim(),
+          role: "pending",
+          hospital_id: "",
+          org_name: orgName.trim(),
+          org_type: orgType,
+          phone: phone.trim(),
+          created_at: serverTimestamp(),
+          email_verified: false,
+          status: "pending_verification",
+        });
+      } catch { /* expected: blocked by rules */ }
+    }
+
+    // Persist org details so the account auto-activates after verification.
+    savePendingOrg({ orgName: orgName.trim(), orgType, phone: phone.trim() });
   };
 
   const signOut = async () => {
@@ -113,32 +183,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const createHospital = async (orgName: string, orgType = "lab"): Promise<string> => {
     if (!auth?.currentUser) throw new Error("Not signed in");
-    if (!functions) throw new Error("Firebase not configured");
     const name = orgName.trim();
     if (!name) throw new Error("Lab name is required");
     const u = auth.currentUser;
 
-    // Mirrors the Flutter flow: hospitals/{id} + users/{uid} are created by the
-    // `activateVerifiedAccount` Cloud Function (Admin SDK). Direct client writes
-    // are blocked by Firestore rules (only platform admins may create them).
-    const activate = httpsCallable<
-      { orgName: string; orgType: string; phone: string },
-      { success: boolean; hospitalId: string }
-    >(functions, "activateVerifiedAccount");
-    const res = await activate({ orgName: name, orgType, phone: "" });
+    const hospitalId = await activateAccount({ orgName: name, orgType, phone: "" });
+    clearPendingOrg();
 
     // Force an ID-token refresh so the freshly-written user doc is readable
     // (rules require is_active === true, just set by the function).
     await u.getIdToken(true);
     setUser(await resolveProfile(u));
-    return res.data.hospitalId;
+    return hospitalId;
   };
 
   const refreshEmailVerified = async (): Promise<boolean> => {
     if (!auth?.currentUser) return false;
     await auth.currentUser.reload();
-    const verified = !!auth.currentUser.emailVerified;
-    if (verified) setUser(await resolveProfile(auth.currentUser));
+    const u = auth.currentUser;
+    const verified = !!u.emailVerified;
+    if (!verified) return false;
+
+    // Mirror Flutter checkEmailVerified: on first verification, auto-activate
+    // using the org details captured at signup. The Cloud Function is idempotent
+    // (returns alreadyActive for repeat calls), so this is safe to retry.
+    const pending = loadPendingOrg();
+    if (pending) {
+      try {
+        await activateAccount(pending);
+        clearPendingOrg();
+        await u.getIdToken(true);
+      } catch {
+        // Activation failed (e.g. function/network) — fall through; the user can
+        // still complete setup manually on the onboarding screen.
+      }
+    }
+
+    setUser(await resolveProfile(u));
     return verified;
   };
 
