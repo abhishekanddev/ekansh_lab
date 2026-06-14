@@ -7,8 +7,9 @@ import {
   signOut as fbSignOut,
   type User,
 } from "firebase/auth";
-import { collection, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db, firebaseReady } from "./firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions, firebaseReady } from "./firebase";
 
 export interface SessionUser {
   uid: string;
@@ -34,9 +35,11 @@ interface AuthState {
   /** Re-fetch the user from Firebase to detect verification (the link
    * opens a new tab, so the SDK state doesn't update on its own). */
   refreshEmailVerified: () => Promise<boolean>;
-  /** First-run onboarding: create a hospital and link the current user to it.
+  /** First-run onboarding: activate the verified account via the
+   *  `activateVerifiedAccount` Cloud Function (creates the hospital + user docs
+   *  with admin privileges — direct client writes are blocked by rules).
    *  Returns the new hospital id. */
-  createHospital: (hospitalName: string) => Promise<string>;
+  createHospital: (orgName: string, orgType?: string) => Promise<string>;
 }
 
 const Ctx = createContext<AuthState | undefined>(undefined);
@@ -108,35 +111,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendEmailVerification(auth.currentUser);
   };
 
-  const createHospital = async (hospitalName: string): Promise<string> => {
+  const createHospital = async (orgName: string, orgType = "lab"): Promise<string> => {
     if (!auth?.currentUser) throw new Error("Not signed in");
-    if (!db) throw new Error("Firestore not configured");
-    const name = hospitalName.trim();
-    if (!name) throw new Error("Hospital name is required");
+    if (!functions) throw new Error("Firebase not configured");
+    const name = orgName.trim();
+    if (!name) throw new Error("Lab name is required");
     const u = auth.currentUser;
 
-    // Create hospitals/{id} with branding name fields the rest of the app reads.
-    const hospitalRef = doc(collection(db, "hospitals"));
-    await setDoc(hospitalRef, {
-      name,
-      hospital_name: name,
-      createdAt: serverTimestamp(),
-      ownerUid: u.uid,
-    });
+    // Mirrors the Flutter flow: hospitals/{id} + users/{uid} are created by the
+    // `activateVerifiedAccount` Cloud Function (Admin SDK). Direct client writes
+    // are blocked by Firestore rules (only platform admins may create them).
+    const activate = httpsCallable<
+      { orgName: string; orgType: string; phone: string },
+      { success: boolean; hospitalId: string }
+    >(functions, "activateVerifiedAccount");
+    const res = await activate({ orgName: name, orgType, phone: "" });
 
-    // Link the signed-in user to the new hospital as admin.
-    const displayName = u.displayName || u.email?.split("@")[0] || "User";
-    await setDoc(doc(db, "users", u.uid), {
-      name: displayName,
-      email: u.email ?? null,
-      hospital_id: hospitalRef.id,
-      hospital_name: name,
-      role: "admin",
-      createdAt: serverTimestamp(),
-    }, { merge: true });
-
+    // Force an ID-token refresh so the freshly-written user doc is readable
+    // (rules require is_active === true, just set by the function).
+    await u.getIdToken(true);
     setUser(await resolveProfile(u));
-    return hospitalRef.id;
+    return res.data.hospitalId;
   };
 
   const refreshEmailVerified = async (): Promise<boolean> => {
