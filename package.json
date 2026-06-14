@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
+    "@types/jsbarcode": "^3.11.4",
     "firebase": "^11.1.0",
+    "jsbarcode": "^3.12.3",
     "lucide-react": "^0.460.0",
     "pdfmake": "^0.2.12",
     "qrcode": "^1.5.4",
