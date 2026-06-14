@@ -295,12 +295,15 @@ function resultsTable(results: LabParameter[]): Content {
     const displayValue = abnormal ? `${param.value} (${marker})` : param.value;
     const underSection = !!param.section;
 
-    const cell = (text: string, opts: { bold?: boolean; color?: string; fontSize?: number; align?: "left" | "center" } = {}): TableCell => ({
+    const cell = (text: string, opts: { bold?: boolean; color?: string; fontSize?: number; align?: "left" | "center"; margin?: [number, number, number, number] } = {}): TableCell => ({
       text, fontSize: opts.fontSize ?? 9.5, bold: opts.bold, color: opts.color ?? BLACK, alignment: opts.align ?? "left",
+      ...(opts.margin ? { margin: opts.margin } : {}),
     });
 
     body.push([
-      cell(underSection ? "    " + param.parameter : param.parameter, { bold: abnormal || !underSection }),
+      // Indent section sub-params with a real left margin (pdfmake collapses
+      // leading spaces, unlike Flutter's pdf engine).
+      cell(param.parameter, { bold: abnormal || !underSection, margin: underSection ? [12, 0, 0, 0] : undefined }),
       cell(displayValue, { bold: abnormal, color: abnormal ? RED : BLACK, align: "center" }),
       cell(param.unit ?? "", { color: GREY, fontSize: 8.5, align: "center" }),
       cell(param.range ?? "", { color: GREY, fontSize: 8.5, align: "center" }),
