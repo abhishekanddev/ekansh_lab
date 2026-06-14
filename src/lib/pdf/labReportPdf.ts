@@ -302,8 +302,9 @@ function resultsTable(results: LabParameter[]): Content {
 
     body.push([
       // Indent section sub-params with a real left margin (pdfmake collapses
-      // leading spaces, unlike Flutter's pdf engine).
-      cell(param.parameter, { bold: abnormal || !underSection, margin: underSection ? [12, 0, 0, 0] : undefined }),
+      // leading spaces, unlike Flutter's pdf engine). 18pt reads clearly at
+      // the PDF zoom levels users actually view at.
+      cell(param.parameter, { bold: abnormal || !underSection, margin: underSection ? [18, 0, 0, 0] : undefined }),
       cell(displayValue, { bold: abnormal, color: abnormal ? RED : BLACK, align: "center" }),
       cell(param.unit ?? "", { color: GREY, fontSize: 8.5, align: "center" }),
       cell(param.range ?? "", { color: GREY, fontSize: 8.5, align: "center" }),
