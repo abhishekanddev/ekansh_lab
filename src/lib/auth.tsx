@@ -7,7 +7,7 @@ import {
   signOut as fbSignOut,
   type User,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db, firebaseReady } from "./firebase";
 
 export interface SessionUser {
@@ -34,6 +34,9 @@ interface AuthState {
   /** Re-fetch the user from Firebase to detect verification (the link
    * opens a new tab, so the SDK state doesn't update on its own). */
   refreshEmailVerified: () => Promise<boolean>;
+  /** First-run onboarding: create a hospital and link the current user to it.
+   *  Returns the new hospital id. */
+  createHospital: (hospitalName: string) => Promise<string>;
 }
 
 const Ctx = createContext<AuthState | undefined>(undefined);
@@ -105,6 +108,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendEmailVerification(auth.currentUser);
   };
 
+  const createHospital = async (hospitalName: string): Promise<string> => {
+    if (!auth?.currentUser) throw new Error("Not signed in");
+    if (!db) throw new Error("Firestore not configured");
+    const name = hospitalName.trim();
+    if (!name) throw new Error("Hospital name is required");
+    const u = auth.currentUser;
+
+    // Create hospitals/{id} with branding name fields the rest of the app reads.
+    const hospitalRef = doc(collection(db, "hospitals"));
+    await setDoc(hospitalRef, {
+      name,
+      hospital_name: name,
+      createdAt: serverTimestamp(),
+      ownerUid: u.uid,
+    });
+
+    // Link the signed-in user to the new hospital as admin.
+    const displayName = u.displayName || u.email?.split("@")[0] || "User";
+    await setDoc(doc(db, "users", u.uid), {
+      name: displayName,
+      email: u.email ?? null,
+      hospital_id: hospitalRef.id,
+      hospital_name: name,
+      role: "admin",
+      createdAt: serverTimestamp(),
+    }, { merge: true });
+
+    setUser(await resolveProfile(u));
+    return hospitalRef.id;
+  };
+
   const refreshEmailVerified = async (): Promise<boolean> => {
     if (!auth?.currentUser) return false;
     await auth.currentUser.reload();
@@ -114,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, loading, firebaseReady, signIn, signUp, signOut, resendVerification, refreshEmailVerified }}>
+    <Ctx.Provider value={{ user, loading, firebaseReady, signIn, signUp, signOut, resendVerification, refreshEmailVerified, createHospital }}>
       {children}
     </Ctx.Provider>
   );
