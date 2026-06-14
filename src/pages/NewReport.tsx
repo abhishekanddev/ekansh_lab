@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, Search, Save, UserCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Search, Save, UserCheck, Plus, X } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { ResultEntry } from "../components/report/ResultEntry";
 import { ReferredByField, referrerDisplayName } from "../components/report/ReferredByField";
@@ -56,6 +56,8 @@ export function NewReport() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const [saving, setSaving] = useState(false);
+  const [showAddTest, setShowAddTest] = useState(false);
+  const [addQ, setAddQ] = useState("");
 
   const priceByName = useMemo(() => {
     const m = new Map<string, number>();
@@ -82,6 +84,30 @@ export function NewReport() {
     }
     setResultsMap(map);
     setActiveTest(selected[0] ?? "");
+  }
+
+  /** Add another test while already on the results step, preserving entries. */
+  function addTestInFlow(name: string) {
+    if (selected.includes(name)) { setActiveTest(name); return; }
+    const tpl = LAB_TEST_TEMPLATES.find((t) => t.testName === name);
+    if (!tpl) return;
+    setSelected((prev) => [...prev, name]);
+    setResultsMap((prev) => ({ ...prev, [name]: buildInitialResults(tpl, patient.gender, patient.cyclePhase) }));
+    setActiveTest(name);
+    setShowAddTest(false);
+  }
+
+  /** Remove a test from the in-flow selection (and its entered results). */
+  function removeTestInFlow(name: string) {
+    setSelected((prev) => {
+      const nextSel = prev.filter((n) => n !== name);
+      if (activeTest === name) setActiveTest(nextSel[0] ?? "");
+      return nextSel;
+    });
+    setResultsMap((prev) => {
+      const { [name]: _drop, ...rest } = prev;
+      return rest;
+    });
   }
 
   function next() {
@@ -268,16 +294,35 @@ export function NewReport() {
 
       {step === 1 && (
         <div>
-          {selected.length > 1 && (
-            <div className="flex gap-1 mb-4 flex-wrap">
-              {selected.map((t) => (
-                <button key={t} onClick={() => setActiveTest(t)}
-                  className={`px-3 py-1.5 rounded-md text-[13px] font-medium ${activeTest === t ? "bg-[var(--color-primary-600)] text-white" : "bg-white border border-[var(--color-border)] text-[var(--color-muted)]"}`}>
-                  {t}
-                </button>
-              ))}
+          <div className="flex gap-1.5 mb-4 flex-wrap items-center">
+            {selected.map((t) => (
+              <span key={t}
+                className={`group inline-flex items-center gap-1.5 rounded-md text-[13px] font-medium ${activeTest === t ? "bg-[var(--color-primary-600)] text-white" : "bg-white border border-[var(--color-border)] text-[var(--color-muted)]"}`}>
+                <button onClick={() => setActiveTest(t)} className="pl-3 py-1.5">{t}</button>
+                {selected.length > 1 && (
+                  <button onClick={() => removeTestInFlow(t)} title="Remove test"
+                    className={`pr-2 py-1.5 ${activeTest === t ? "text-white/70 hover:text-white" : "text-[var(--color-faint)] hover:text-[var(--color-danger)]"}`}>
+                    <X size={13} />
+                  </button>
+                )}
+              </span>
+            ))}
+            <div className="relative">
+              <button onClick={() => { setShowAddTest((v) => !v); setAddQ(""); }}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-[13px] font-medium border border-dashed border-[var(--color-primary-300)] text-[var(--color-primary-600)] hover:bg-[var(--color-primary-50)]">
+                <Plus size={14} /> Add test
+              </button>
+              {showAddTest && (
+                <AddTestPicker
+                  query={addQ}
+                  onQuery={setAddQ}
+                  excluded={selected}
+                  onPick={addTestInFlow}
+                  onClose={() => setShowAddTest(false)}
+                />
+              )}
             </div>
-          )}
+          </div>
           {activeTest && resultsMap[activeTest] && (
             <ResultEntry testType={activeTest} results={resultsMap[activeTest]} onChange={(next) => setResultsMap({ ...resultsMap, [activeTest]: next })} />
           )}
@@ -324,4 +369,53 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 function Dt({ label, value }: { label: string; value: string }) {
   return <><dt className="text-[var(--color-muted)]">{label}</dt><dd className="font-medium text-right">{value}</dd></>;
+}
+
+/** Searchable dropdown to add another test on the results step. */
+function AddTestPicker({
+  query, onQuery, excluded, onPick, onClose,
+}: {
+  query: string;
+  onQuery: (v: string) => void;
+  excluded: string[];
+  onPick: (name: string) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [onClose]);
+
+  const results = useMemo(() => {
+    const ql = query.trim().toLowerCase();
+    return LAB_TEST_TEMPLATES.filter(
+      (t) => !excluded.includes(t.testName) && (!ql || t.testName.toLowerCase().includes(ql) || t.category.toLowerCase().includes(ql)),
+    ).slice(0, 50);
+  }, [query, excluded]);
+
+  return (
+    <div ref={ref} className="absolute z-30 mt-1 left-0 w-[320px] card p-0 shadow-lg">
+      <div className="relative border-b border-[var(--color-border)]">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-faint)]" />
+        <input className="input pl-9 h-9 border-0 rounded-none" placeholder="Search tests to add…" value={query} autoFocus onChange={(e) => onQuery(e.target.value)} />
+      </div>
+      <div className="max-h-[280px] overflow-y-auto py-1">
+        {results.length === 0 ? (
+          <div className="px-3 py-3 text-[13px] text-[var(--color-muted)]">No more tests to add.</div>
+        ) : (
+          results.map((t) => (
+            <button key={t.testName} onClick={() => onPick(t.testName)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--color-bg)]">
+              <span className="flex-1">{t.testName}</span>
+              <span className="text-[11px] text-[var(--color-faint)]">{t.category}</span>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
 }
