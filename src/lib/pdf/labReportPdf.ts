@@ -218,10 +218,12 @@ function patientInfoGrid(report: LabReport, assets: Assets, verificationCode?: s
   return {
     table: {
       widths: ["*", "*", 55],
+      // Full bordered box (mockup .pgrid: 1.1px #CCCCCC all sides) plus the two
+      // internal vertical dividers between the three columns.
       body: [[
-        { stack: leftStack, border: [false, false, true, false] },
-        { stack: middleStack, border: [false, false, true, false] },
-        { stack: rightStack, border: [false, false, false, false], alignment: "center" },
+        { stack: leftStack, border: [true, true, true, true] },
+        { stack: middleStack, border: [false, true, true, true] },
+        { stack: rightStack, border: [false, true, true, true], alignment: "center" },
       ]],
     },
     layout: {
@@ -265,49 +267,62 @@ function testBanner(): Content {
 function resultsTable(results: LabParameter[]): Content {
   const body: TableCell[][] = [];
 
-  const sectionsWithValues = new Set<string>();
+  // Group consecutive/interleaved params by section so each section header is
+  // emitted only once. Lab data often interleaves a section with its sibling
+  // (e.g. Differential / Absolute alternating per analyte); iterating in raw
+  // order would re-emit the header on every switch. We bucket by section while
+  // preserving first-appearance order of both sections and standalone params.
+  type Slot = { section: string | null; params: LabParameter[] };
+  const slots: Slot[] = [];
+  const sectionSlot = new Map<string, Slot>();
   for (const p of results) {
-    if ((p.value ?? "").trim() && p.section) sectionsWithValues.add(p.section);
+    if (!(p.value ?? "").trim()) continue;
+    const sec = p.section || null;
+    if (sec) {
+      let slot = sectionSlot.get(sec);
+      if (!slot) {
+        slot = { section: sec, params: [] };
+        sectionSlot.set(sec, slot);
+        slots.push(slot);
+      }
+      slot.params.push(p);
+    } else {
+      slots.push({ section: null, params: [p] });
+    }
   }
 
-  let currentSection: string | null = null;
-  for (const param of results) {
-    if (!(param.value ?? "").trim()) continue;
+  const cell = (text: string, opts: { bold?: boolean; color?: string; fontSize?: number; align?: "left" | "center"; margin?: [number, number, number, number] } = {}): TableCell => ({
+    text, fontSize: opts.fontSize ?? 9.5, bold: opts.bold, color: opts.color ?? BLACK, alignment: opts.align ?? "left",
+    ...(opts.margin ? { margin: opts.margin } : {}),
+  });
 
-    if (param.section && param.section !== currentSection) {
-      currentSection = param.section;
-      if (sectionsWithValues.has(currentSection)) {
-        body.push([
-          { columns: [{ canvas: [{ type: "rect", x: 0, y: 0, w: 2, h: 10, color: PRIMARY }], width: 2 }, { text: currentSection, fontSize: 9.5, bold: true, color: BLACK, margin: [4, 0, 0, 0] }], columnGap: 0, margin: [4, 5, 0, 2], border: [false, false, false, false] },
-          { text: "", border: [false, false, false, false] },
-          { text: "", border: [false, false, false, false] },
-          { text: "", border: [false, false, false, false] },
-        ]);
-      }
-    } else if (!param.section && currentSection) {
-      currentSection = null;
+  for (const slot of slots) {
+    const underSection = !!slot.section;
+    if (slot.section) {
+      body.push([
+        { columns: [{ canvas: [{ type: "rect", x: 0, y: 0, w: 2, h: 10, color: PRIMARY }], width: 2 }, { text: slot.section, fontSize: 9.5, bold: true, color: BLACK, margin: [4, 0, 0, 0] }], columnGap: 0, margin: [4, 5, 0, 2], border: [false, false, false, false] },
+        { text: "", border: [false, false, false, false] },
+        { text: "", border: [false, false, false, false] },
+        { text: "", border: [false, false, false, false] },
+      ]);
     }
 
-    const flag = computeFlag(param.value, param.range) ?? param.flag ?? null;
-    const abnormal = flag != null;
-    const marker = flag === "H" || flag === "HIGH" ? "H" : "L";
-    const displayValue = abnormal ? `${param.value} (${marker})` : param.value;
-    const underSection = !!param.section;
+    for (const param of slot.params) {
+      const flag = computeFlag(param.value, param.range) ?? param.flag ?? null;
+      const abnormal = flag != null;
+      const marker = flag === "H" || flag === "HIGH" ? "H" : "L";
+      const displayValue = abnormal ? `${param.value} (${marker})` : param.value;
 
-    const cell = (text: string, opts: { bold?: boolean; color?: string; fontSize?: number; align?: "left" | "center"; margin?: [number, number, number, number] } = {}): TableCell => ({
-      text, fontSize: opts.fontSize ?? 9.5, bold: opts.bold, color: opts.color ?? BLACK, alignment: opts.align ?? "left",
-      ...(opts.margin ? { margin: opts.margin } : {}),
-    });
-
-    body.push([
-      // Indent section sub-params with a real left margin (pdfmake collapses
-      // leading spaces, unlike Flutter's pdf engine). 18pt reads clearly at
-      // the PDF zoom levels users actually view at.
-      cell(param.parameter, { bold: abnormal || !underSection, margin: underSection ? [18, 0, 0, 0] : undefined }),
-      cell(displayValue, { bold: abnormal, color: abnormal ? RED : BLACK, align: "center" }),
-      cell(param.unit ?? "", { color: GREY, fontSize: 8.5, align: "center" }),
-      cell(param.range ?? "", { color: GREY, fontSize: 8.5, align: "center" }),
-    ]);
+      body.push([
+        // Indent section sub-params with a real left margin (pdfmake collapses
+        // leading spaces, unlike Flutter's pdf engine). 18pt reads clearly at
+        // the PDF zoom levels users actually view at.
+        cell(param.parameter, { bold: abnormal || !underSection, margin: underSection ? [18, 0, 0, 0] : undefined }),
+        cell(displayValue, { bold: abnormal, color: abnormal ? RED : BLACK, align: "center" }),
+        cell(param.unit ?? "", { color: GREY, fontSize: 8.5, align: "center" }),
+        cell(param.range ?? "", { color: GREY, fontSize: 8.5, align: "center" }),
+      ]);
+    }
   }
 
   return {
