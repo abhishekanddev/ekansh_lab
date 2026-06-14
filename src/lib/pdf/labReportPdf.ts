@@ -103,8 +103,14 @@ function headerWidget(config: HospitalConfig, assets: Assets): Content {
     ? { width: 40, image: assets.logo, fit: [40, 40] }
     : {
         width: 40,
-        table: { widths: [38], heights: [38], body: [[{ text: "LOGO", color: PRIMARY, bold: true, fontSize: 8, alignment: "center", margin: [0, 14, 0, 0] }]] },
-        layout: { hLineColor: () => PRIMARY, vLineColor: () => PRIMARY, hLineWidth: () => 1, vLineWidth: () => 1 },
+        // Exact 40×40 box (Flutter Container 40×40, 1pt primary border).
+        // Zero cell padding so the box doesn't inflate; margin centres "LOGO".
+        table: { widths: [40], heights: [40], body: [[{ text: "LOGO", color: PRIMARY, bold: true, fontSize: 8, alignment: "center", margin: [0, 16, 0, 0] }]] },
+        layout: {
+          hLineColor: () => PRIMARY, vLineColor: () => PRIMARY,
+          hLineWidth: () => 1, vLineWidth: () => 1,
+          paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0,
+        },
       }) as unknown as Content;
 
   return {
@@ -115,6 +121,9 @@ function headerWidget(config: HospitalConfig, assets: Assets): Content {
           { width: 10, text: "" },
           {
             width: "*",
+            // Nudge down so the name vertically centres against the 40pt logo,
+            // matching Flutter's Row crossAxisAlignment: center.
+            margin: [0, 7, 0, 0],
             stack: [
               { text: name, fontSize: 14, bold: true, color: PRIMARY, characterSpacing: 0.3 },
               ...(subtitle ? [{ text: subtitle, fontSize: 8, color: GREY } as Content] : []),
@@ -124,6 +133,7 @@ function headerWidget(config: HospitalConfig, assets: Assets): Content {
           {
             width: "auto",
             alignment: "right",
+            margin: [0, 3, 0, 0],
             stack: [
               ...(contact ? [{ text: "Ph: " + contact, fontSize: 7.5, color: GREY } as Content] : []),
               ...(email ? [{ text: email, fontSize: 7.5, color: GREY } as Content] : []),
