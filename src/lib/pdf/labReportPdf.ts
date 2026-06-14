@@ -178,10 +178,10 @@ function patientInfoGrid(report: LabReport, assets: Assets, verificationCode?: s
   const barcodeData = uhid || (report.id.length > 10 ? report.id.slice(-10) : report.id);
   const barcodeImg = code128DataUrl(barcodeData);
 
-  // Left column — omit fields that have no value (#1).
+  // Left column — omit fields that have no value (#1). Tight vertical spacing
+  // to match the mobile PDF (no extra spacer rows between KVs).
   const leftStack: Content[] = [];
   if (name) leftStack.push(patientKv("Patient Name", name, true));
-  leftStack.push({ text: "", margin: [0, 0.5, 0, 0] });
   leftStack.push(patientKv("Age / Sex", `${age} Yrs / ${gender}`.trim()));
   if (referredBy) leftStack.push(patientKv("Referred by", referredBy));
   if (uhid) leftStack.push(patientKv("UHID", uhid));
@@ -205,7 +205,6 @@ function patientInfoGrid(report: LabReport, assets: Assets, verificationCode?: s
       ],
       columnGap: 0,
     },
-    { text: "", margin: [0, 1.5, 0, 0] },
     dateKv("Reg. Date", fmtDate(report.createdAt)),
     dateKv("Collection", fmtDate((fd.collectionDate as unknown) ?? report.createdAt)),
     dateKv("Report Date", fmtDate((fd.reportDate as unknown) ?? report.createdAt)),
