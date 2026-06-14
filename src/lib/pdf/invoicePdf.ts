@@ -141,8 +141,9 @@ function invoiceTable(inv: InvoiceModel): Content {
       { text: n2(it.amount), fontSize: 7.5, alignment: "center" },
     ]);
   }
+  // "*" on Particulars makes the table fill the full content width (~511pt).
   return {
-    table: { headerRows: 1, widths: [110, 70, 50, 30, 45, 35, 55], body },
+    table: { headerRows: 1, widths: ["*", 70, 60, 30, 55, 45, 70], body },
     layout: { hLineColor: () => LINE, vLineColor: () => LINE, hLineWidth: () => 0.5, vLineWidth: () => 0.5 },
     margin: [0, 6, 0, 0],
   };
@@ -162,8 +163,9 @@ function totals(inv: InvoiceModel): Content {
   if ((inv.taxTotal ?? 0) > 0) rows.push(totalsRow("Tax :", n2(inv.taxTotal)));
   rows.push(totalsRow("Final Bill Amount :", n2(inv.finalBillAmount), true));
   rows.push(totalsRow("Paid Amount :", n2(inv.paidAmount), true));
+  // Labels (130) and values (80) align to the right edge of the invoice table.
   return {
-    table: { widths: ["*", 90, 70], body: rows },
+    table: { widths: ["*", 130, 80], body: rows },
     layout: { hLineColor: () => LINE, vLineColor: () => LINE, hLineWidth: () => 0.3, vLineWidth: () => 0 },
     margin: [0, 4, 0, 0],
   };
@@ -180,10 +182,12 @@ function receivedLine(inv: InvoiceModel): Content {
 
 function paymentTable(inv: InvoiceModel): Content {
   const head = ["SN", "Receipt No.", "Date", "Invoice No.", "Total Amount (Rs)", "Paymode"];
+  // Invoice No. flexes ("*") so the table spans the full content width and lines
+  // up edge-to-edge with the invoice table above.
   return {
     table: {
       headerRows: 1,
-      widths: [20, 70, 90, 110, 80, 50],
+      widths: [22, 80, 100, "*", 90, 60],
       body: [
         head.map((h) => ({ text: h, fontSize: 7.5, bold: true, fillColor: "#F0F0F0", alignment: "center" })),
         [

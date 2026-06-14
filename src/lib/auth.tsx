@@ -3,6 +3,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signOut as fbSignOut,
   type User,
 } from "firebase/auth";
@@ -13,6 +14,7 @@ export interface SessionUser {
   uid: string;
   email: string | null;
   name: string;
+  emailVerified: boolean;
   /** Resolved from users/{uid}.hospital_id — the multi-tenant key. */
   hospitalId: string | null;
   hospitalName: string | null;
@@ -27,6 +29,11 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Resend the verification email to the currently-signed-in user. */
+  resendVerification: () => Promise<void>;
+  /** Re-fetch the user from Firebase to detect verification (the link
+   * opens a new tab, so the SDK state doesn't update on its own). */
+  refreshEmailVerified: () => Promise<boolean>;
 }
 
 const Ctx = createContext<AuthState | undefined>(undefined);
@@ -37,6 +44,7 @@ async function resolveProfile(u: User): Promise<SessionUser> {
     uid: u.uid,
     email: u.email,
     name: u.displayName || u.email?.split("@")[0] || "User",
+    emailVerified: u.emailVerified,
     hospitalId: null,
     hospitalName: null,
     role: null,
@@ -82,7 +90,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     if (!auth) throw new Error("Firebase not configured");
-    await createUserWithEmailAndPassword(auth, email, password);
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    // Mirror Flutter: send a verification link immediately on signup.
+    try { await sendEmailVerification(cred.user); } catch { /* non-fatal */ }
   };
 
   const signOut = async () => {
@@ -90,8 +100,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  const resendVerification = async () => {
+    if (!auth?.currentUser) throw new Error("Not signed in");
+    await sendEmailVerification(auth.currentUser);
+  };
+
+  const refreshEmailVerified = async (): Promise<boolean> => {
+    if (!auth?.currentUser) return false;
+    await auth.currentUser.reload();
+    const verified = !!auth.currentUser.emailVerified;
+    if (verified) setUser(await resolveProfile(auth.currentUser));
+    return verified;
+  };
+
   return (
-    <Ctx.Provider value={{ user, loading, firebaseReady, signIn, signUp, signOut }}>
+    <Ctx.Provider value={{ user, loading, firebaseReady, signIn, signUp, signOut, resendVerification, refreshEmailVerified }}>
       {children}
     </Ctx.Provider>
   );

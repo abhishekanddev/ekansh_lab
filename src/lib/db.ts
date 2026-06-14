@@ -12,18 +12,29 @@ export function requireDb() {
   return db;
 }
 
+/** Throws a clear error when the signed-in user has no hospital assigned,
+ *  instead of letting Firestore crash on a null path segment. */
+function requireHid(hid: string | null | undefined): string {
+  if (!hid) {
+    throw new Error(
+      "No hospital is linked to your account. Ask an admin to set hospital_id on your user profile."
+    );
+  }
+  return hid;
+}
+
 /** hospitals/{hid} doc. */
-export function hospitalRef(hid: string): DocumentReference {
-  return doc(requireDb(), "hospitals", hid);
+export function hospitalRef(hid: string | null | undefined): DocumentReference {
+  return doc(requireDb(), "hospitals", requireHid(hid));
 }
 
 /** A sub-collection under hospitals/{hid}. */
-export function hospitalCol(hid: string, name: string): CollectionReference {
-  return collection(requireDb(), "hospitals", hid, name);
+export function hospitalCol(hid: string | null | undefined, name: string): CollectionReference {
+  return collection(requireDb(), "hospitals", requireHid(hid), name);
 }
 
-export function hospitalDoc(hid: string, name: string, id: string): DocumentReference {
-  return doc(requireDb(), "hospitals", hid, name, id);
+export function hospitalDoc(hid: string | null | undefined, name: string, id: string): DocumentReference {
+  return doc(requireDb(), "hospitals", requireHid(hid), name, id);
 }
 
 export const COL = {

@@ -37,10 +37,13 @@ export function Login() {
     try {
       if (mode === "signup") {
         await signUp(email, password);
-        // New labs start on Report Settings to configure branding.
-        setPending("/app/config");
+        // New labs land on the email-verification gate until they click the link;
+        // RequireAuth bounces unverified users to /app/verify-email anyway, but
+        // setting it here avoids a flash through /app/config.
+        setPending("/app/verify-email");
       } else {
         await signIn(email, password);
+        // RequireAuth will redirect to /app/verify-email if not verified.
         setPending("/app/dashboard");
       }
       // Keep busy=true; the effect navigates once the user resolves.
