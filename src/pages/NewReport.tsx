@@ -6,9 +6,11 @@ import { ResultEntry } from "../components/report/ResultEntry";
 import { ReferredByField, referrerDisplayName } from "../components/report/ReferredByField";
 import { LAB_TEST_TEMPLATES, TEST_CATEGORIES, type CyclePhase } from "../data/labTestTemplates";
 import { buildInitialResults, genId, normalizePhone } from "../lib/reportBuilder";
+import { createVerificationEntry } from "../lib/verification";
 import { CYCLE_PHASE_LABELS } from "../lib/labLogic";
 import type { LabParameter, Referrer } from "../lib/types";
 import { useSaveReport, useUpsertPatientUhid, usePatientByPhone, useTestCatalog } from "../hooks/useLabData";
+import { useAuth } from "../lib/auth";
 import { serverTimestamp } from "firebase/firestore";
 
 interface Patient {
@@ -20,6 +22,7 @@ const STEPS = ["Patient & Tests", "Enter Results", "Review & Save"] as const;
 
 export function NewReport() {
   const nav = useNavigate();
+  const { user } = useAuth();
   const catalog = useTestCatalog();
   const saveReport = useSaveReport();
   const upsertPatient = useUpsertPatientUhid();
@@ -108,6 +111,23 @@ export function NewReport() {
       }
 
       const referredBy = referrer ? referrerDisplayName(referrer) : "";
+      const testTypeLabel = selected.length === 1 ? selected[0] : selected.join(", ");
+
+      // Register a public verification code (EP-XXXXXX) so the report's QR/code
+      // resolves and matches the format the Flutter app uses.
+      let verificationCode: string | undefined;
+      if (user?.hospitalId) {
+        try {
+          verificationCode = await createVerificationEntry({
+            hospitalId: user.hospitalId,
+            reportId: id,
+            hospitalName: user.hospitalName ?? "",
+            patientName: patient.name,
+            testType: testTypeLabel,
+          });
+        } catch { /* non-fatal — PDF falls back to a short code */ }
+      }
+
       const formData = { age: patient.age, gender: patient.gender, phone };
       const base = {
         id,
@@ -116,6 +136,7 @@ export function NewReport() {
         patientId: uhid || undefined,
         referredBy,
         referredById: referrer?.id,
+        verificationCode,
         formData,
         price: totalPrice,
         createdAt: serverTimestamp(),
