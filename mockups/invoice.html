@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Invoice PDF — pixel spec</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #525659; font-family: Helvetica, Arial, sans-serif; }
+  .caption { color: #b8babc; font-size: 11px; text-align: center; padding: 14px 0 8px; letter-spacing: 0.5px; }
+  .page {
+    width: 794px;
+    min-height: 1123px;
+    background: #ffffff;
+    margin: 0 auto 30px;
+    padding: 43px 56px 37px 56px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.45);
+    display: flex;
+    flex-direction: column;
+  }
+  /* ---------- Header ---------- */
+  .hdr { display: flex; align-items: center; }
+  .logo {
+    width: 53px; height: 53px;
+    border: 1.3px solid #00535B; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10.7px; font-weight: bold; color: #00535B;
+    flex: 0 0 auto;
+  }
+  .name-col { flex: 1 1 auto; padding-left: 13px; }
+  .lab-name { font-size: 18.7px; font-weight: bold; color: #00535B; letter-spacing: 0.4px; text-transform: uppercase; }
+  .gstin { font-size: 8.7px; color: #888888; }
+  .right-col { text-align: right; max-width: 173px; }
+  .right-col .ph, .right-col .em { font-size: 10px; color: #555555; }
+  .right-col .addr { font-size: 9.3px; color: #555555; max-width: 173px; }
+  .divider { width: 100%; height: 2px; background: #00535B; margin-top: 7px; }
+  .after-div { height: 10.7px; }
+  /* ---------- Patient box ---------- */
+  .pbox { border: 1.1px solid #CCCCCC; padding: 8px; display: flex; justify-content: space-between; }
+  .pbox .right { text-align: right; }
+  .kv { display: flex; padding: 0.7px 0; align-items: baseline; }
+  .kv.r { justify-content: flex-end; }
+  .kv .k { font-size: 10.7px; font-weight: bold; color: #555555; }
+  .kv .v { font-size: 11.3px; color: #1A1A1A; padding-left: 3px; }
+  .kv .v.big { font-size: 12.7px; font-weight: bold; }
+  /* ---------- Section label ---------- */
+  .seclabel { font-size: 14.7px; font-weight: bold; color: #1A1A1A; }
+  .gap6 { height: 8px; }
+  .gap8 { height: 10.7px; }
+  .gap4 { height: 5.3px; }
+  .gap14 { height: 18.7px; }
+  /* ---------- Tables ---------- */
+  table.bt { table-layout: fixed; width: 100%; border-collapse: collapse; }
+  table.bt th, table.bt td {
+    border: 0.7px solid #CCCCCC; font-size: 10px; text-align: center;
+    padding: 3px 2px; color: #1A1A1A; vertical-align: middle;
+  }
+  table.bt th { background: #F0F0F0; font-weight: bold; }
+  /* invoice items cols */
+  col.i1 { width: 26.8%; } col.i2 { width: 17.9%; } col.i3 { width: 13.4%; }
+  col.i4 { width: 8.9%; } col.i5 { width: 10.7%; } col.i6 { width: 8.9%; } col.i7 { width: 13.4%; }
+  /* payment cols */
+  col.p1 { width: 5%; } col.p2 { width: 20%; } col.p3 { width: 20%; }
+  col.p4 { width: 20%; } col.p5 { width: 20%; } col.p6 { width: 15%; }
+  /* ---------- Totals box ---------- */
+  .totbox { border: 0.7px solid #CCCCCC; }
+  .totrow {
+    display: flex; justify-content: flex-end; align-items: center;
+    border-bottom: 0.4px solid #CCCCCC; padding: 2.7px 10.7px;
+  }
+  .totrow:last-child { border-bottom: none; }
+  .totrow .lbl { font-size: 10.7px; color: #1A1A1A; }
+  .totrow .valcell { width: 93px; text-align: right; font-size: 11.3px; color: #1A1A1A; margin-left: 10.7px; }
+  .totrow.bold .lbl, .totrow.bold .valcell { font-weight: bold; }
+  /* ---------- Received line ---------- */
+  .recv { border: 0.7px solid #CCCCCC; padding: 5.3px 8px; font-size: 10.7px; font-weight: bold; color: #1A1A1A; }
+  /* ---------- Payment total box ---------- */
+  .ptotbox { border: 0.7px solid #CCCCCC; display: flex; justify-content: flex-end; align-items: center; padding: 4px 10.7px; }
+  .ptotbox .lbl { font-size: 10.7px; font-weight: bold; color: #1A1A1A; padding-right: 10.7px; }
+  .ptotbox .val { font-size: 11.3px; font-weight: bold; color: #1A1A1A; }
+  /* ---------- Footer ---------- */
+  .footer { margin-top: auto; padding-top: 16px; }
+  .frule { width: 100%; border-top: 0.7px solid #CCCCCC; }
+  .fline { text-align: center; font-size: 9.3px; color: #555555; }
+  .fnote { text-align: center; font-size: 8px; color: #888888; }
+</style>
+</head>
+<body>
+<div class="caption">Invoice PDF — pixel spec</div>
+<div class="page">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="logo">LOGO</div>
+    <div class="name-col">
+      <div class="lab-name">JEEVAN RAKSHA PATH LAB</div>
+      <div class="gstin">GSTIN: vjhkj</div>
+    </div>
+    <div class="right-col">
+      <div class="ph">Ph: 9794423233</div>
+      <div class="em">jr@lab.com</div>
+      <div class="addr">Balamau</div>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <div class="after-div"></div>
+
+  <!-- Patient box -->
+  <div class="pbox">
+    <div class="left">
+      <div class="kv"><span class="k">Patient Name :</span><span class="v big">Mr. Saubhik Bhaumik</span></div>
+      <div class="kv"><span class="k">Age / Sex :</span><span class="v">27 Yrs / Male</span></div>
+      <div class="kv"><span class="k">Phone :</span><span class="v">9169947371</span></div>
+    </div>
+    <div class="right">
+      <div class="kv r"><span class="k">Date :</span><span class="v">11, Jun 2026</span></div>
+      <div class="kv r"><span class="k">Invoice No. :</span><span class="v">INV 00004</span></div>
+    </div>
+  </div>
+  <div class="gap8"></div>
+
+  <!-- Invoice items -->
+  <div class="seclabel">Invoice</div>
+  <div class="gap6"></div>
+  <table class="bt">
+    <colgroup><col class="i1"><col class="i2"><col class="i3"><col class="i4"><col class="i5"><col class="i6"><col class="i7"></colgroup>
+    <thead>
+      <tr>
+        <th>Particulars</th><th>Date</th><th>Rate (Rs)</th><th>QTY</th><th>Discount</th><th>Tax</th><th>Amount<br>(Rs)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>CBC (Complete Blood Count)</td><td>11, Jun 2026</td><td>350.00</td><td>1</td><td>0.00</td><td>5.0%</td><td>367.50</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Totals -->
+  <div class="totbox" style="border-top:none;">
+    <div class="totrow"><span class="lbl">Bill Amount :</span><span class="valcell">350.00</span></div>
+    <div class="totrow"><span class="lbl">Tax :</span><span class="valcell">17.50</span></div>
+    <div class="totrow bold"><span class="lbl">Final Bill Amount :</span><span class="valcell">367.50</span></div>
+    <div class="totrow bold"><span class="lbl">Paid Amount :</span><span class="valcell">367.50</span></div>
+  </div>
+  <div class="gap6"></div>
+
+  <!-- Received line -->
+  <div class="recv">Received with Thanks: Rs. Three Hundred Sixty Seven Only</div>
+  <div class="gap14"></div>
+
+  <!-- Payment -->
+  <div class="seclabel">Payment</div>
+  <div class="gap6"></div>
+  <table class="bt">
+    <colgroup><col class="p1"><col class="p2"><col class="p3"><col class="p4"><col class="p5"><col class="p6"></colgroup>
+    <thead>
+      <tr>
+        <th>SN</th><th>Receipt No.</th><th>Date</th><th>Invoice No.</th><th>Total Amount (Rs)</th><th>Paymode</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td><td>RCPT 00004</td><td>11, Jun 2026 08:18 pm</td><td>INV 00004 (367.50)</td><td>367.50</td><td>Cash</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="gap4"></div>
+
+  <!-- Payment total -->
+  <div class="ptotbox">
+    <span class="lbl">Total</span>
+    <span class="val">367.50</span>
+  </div>
+  <div class="gap6"></div>
+
+  <!-- Received line again -->
+  <div class="recv">Received with Thanks: Rs. Three Hundred Sixty Seven Only</div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="frule"></div>
+    <div class="gap4"></div>
+    <div class="fline">E-mail: jr@lab.com</div>
+    <div class="fline">Mob: 9794423233 | Timings: Open 24x7</div>
+    <div style="height:4px;"></div>
+    <div class="fnote">Healthcare services exempt from GST as per Notification 12/2017-CT(R)</div>
+  </div>
+
+</div>
+</body>
+</html>

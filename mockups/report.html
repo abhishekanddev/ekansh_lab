@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Report PDF — pixel spec</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #525659; font-family: Helvetica, Arial, sans-serif; }
+  .caption { color: #b8babc; font-size: 11px; text-align: center; padding: 14px 0 8px; letter-spacing: 0.5px; }
+  .page {
+    width: 794px;
+    min-height: 1123px;
+    background: #ffffff;
+    margin: 0 auto 30px;
+    padding: 43px 56px 37px 56px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.45);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  /* ---------- Header ---------- */
+  .hdr { display: flex; align-items: center; }
+  .logo {
+    width: 53px; height: 53px;
+    border: 1.3px solid #00535B; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10.7px; font-weight: bold; color: #00535B;
+    flex: 0 0 auto;
+  }
+  .name-col { flex: 1 1 auto; padding-left: 13px; }
+  .lab-name { font-size: 18.7px; font-weight: bold; color: #00535B; letter-spacing: 0.4px; text-transform: uppercase; }
+  .lab-sub { font-size: 10.7px; color: #555555; }
+  .right-col { text-align: right; max-width: 173px; }
+  .right-col .ph, .right-col .em { font-size: 10px; color: #555555; }
+  .right-col .addr { font-size: 9.3px; color: #555555; max-width: 173px; }
+  .divider { width: 100%; height: 2px; background: #00535B; margin-top: 7px; }
+  .after-div { height: 5.3px; }
+  /* ---------- Patient grid ---------- */
+  .pgrid { border: 1.1px solid #CCCCCC; padding: 7px; display: flex; }
+  .pcol-left { flex: 3; border-right: 1.1px solid #CCCCCC; padding-right: 7px; }
+  .pcol-mid { flex: 3; border-right: 1.1px solid #CCCCCC; padding: 0 7px; }
+  .pcol-right { flex: 0 0 73px; padding-left: 7px; text-align: center; }
+  .kv { display: flex; padding: 0.7px 0; align-items: baseline; }
+  .kv .k { width: 73px; flex: 0 0 73px; font-size: 12px; color: #555555; }
+  .kv .colon { font-size: 12px; color: #555555; padding: 0 3px; }
+  .kv .v { font-size: 12px; font-weight: bold; color: #1A1A1A; }
+  .kv .v.big { font-size: 13.3px; }
+  /* barcode */
+  .bc-row { display: flex; align-items: center; padding-bottom: 1.5px; }
+  .barcode {
+    width: 93px; height: 21px;
+    background-image: repeating-linear-gradient(90deg,
+      #000 0 1px, #fff 1px 3px, #000 3px 5px, #fff 5px 6px,
+      #000 6px 9px, #fff 9px 10px, #000 10px 11px, #fff 11px 14px,
+      #000 14px 16px, #fff 16px 17px);
+    background-size: 17px 100%;
+  }
+  .bc-text { font-size: 10px; font-weight: bold; color: #1A1A1A; padding-left: 4px; }
+  /* QR */
+  .qr {
+    width: 56px; height: 56px;
+    display: grid; grid-template-columns: repeat(11, 1fr); grid-template-rows: repeat(11, 1fr);
+    margin: 0 auto;
+  }
+  .qr i { display: block; }
+  .qr i.b { background: #000; }
+  .qr-code { font-size: 8px; font-weight: bold; color: #1A1A1A; margin-top: 2px; }
+  .qr-scan { font-size: 7.3px; font-style: italic; color: #888888; }
+  .after-box { height: 5.3px; }
+  /* ---------- Test title ---------- */
+  .test-title {
+    text-align: center; font-size: 14.7px; font-weight: bold; color: #1A1A1A;
+    letter-spacing: 0.8px; text-transform: uppercase;
+    border-bottom: 1.1px solid #CCCCCC; padding-top: 5.3px; padding-bottom: 4px;
+  }
+  /* ---------- Results table ---------- */
+  table.res { table-layout: fixed; width: 100%; border-collapse: collapse; }
+  table.res col.c1 { width: 40%; }
+  table.res col.c2 { width: 18%; }
+  table.res col.c3 { width: 17%; }
+  table.res col.c4 { width: 25%; }
+  table.res th {
+    font-size: 11.3px; font-weight: bold; color: #555555; letter-spacing: 0.4px;
+    padding: 4px 5.3px; border-bottom: 1.3px solid #1A1A1A;
+  }
+  table.res th.l { text-align: left; }
+  table.res th.c { text-align: center; }
+  table.res td { border-bottom: 0.7px solid #E8E8E8; padding: 3.3px 5.3px; }
+  td.tname { font-size: 12.7px; color: #1A1A1A; }
+  td.val { font-size: 12.7px; color: #1A1A1A; text-align: center; }
+  td.unit { font-size: 11.3px; color: #555555; text-align: center; }
+  td.ref { font-size: 11.3px; color: #555555; text-align: center; }
+  td.tname.bold, td.val.bold { font-weight: bold; }
+  td.abn { color: #CC0000; font-weight: bold; }
+  td.tname.indent { padding-left: 18px; }
+  /* section header row */
+  tr.sec td { border-bottom: none; padding: 6.7px 0 2.7px 5.3px; }
+  .sec-inner { display: flex; align-items: center; }
+  .sec-bar { width: 2px; height: 13.3px; background: #00535B; }
+  .sec-name { font-size: 12.7px; font-weight: bold; color: #1A1A1A; padding-left: 4px; }
+  /* ---------- End / interpretation / footer ---------- */
+  .end-report { text-align: center; font-style: italic; font-size: 10.7px; color: #888888; padding: 10.7px 0 5.3px; }
+  .interp { border: 1.1px solid #CCCCCC; padding: 8px; }
+  .interp .t { font-size: 12.7px; font-weight: bold; color: #1A1A1A; }
+  .interp .b { font-size: 12px; color: #555555; line-height: 1.5; }
+  .footer { margin-top: auto; padding-top: 16px; }
+  .sig-row { display: flex; justify-content: space-between; align-items: flex-end; }
+  .sig { width: 107px; }
+  .sig .line { width: 107px; border-top: 1.1px solid #CCCCCC; padding-top: 2px; }
+  .sig .nm { font-size: 10px; font-weight: bold; color: #1A1A1A; }
+  .sig .ql { font-size: 8.7px; color: #555555; }
+  .sig .rg { font-size: 8px; color: #888888; }
+  .sig.right { text-align: right; }
+  .sig.right .line { margin-left: auto; }
+  .wish { text-align: center; font-style: italic; font-size: 10px; color: #555555; padding: 8px 0 6px; }
+  .frule { width: 100%; border-top: 1.1px solid #CCCCCC; }
+  .notvalid { text-align: center; font-size: 8.7px; font-weight: bold; color: #000; padding: 4px 0; }
+  .alarm { text-align: center; font-size: 8px; color: #888888; padding-bottom: 4px; }
+  .fbot { display: flex; justify-content: space-between; }
+  .fbot .l { font-size: 8px; color: #888888; }
+  .fbot .r { font-size: 8.7px; color: #888888; }
+</style>
+</head>
+<body>
+<div class="caption">Report PDF — pixel spec</div>
+<div class="page">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="logo">LOGO</div>
+    <div class="name-col">
+      <div class="lab-name">ABHISHEK</div>
+      <div class="lab-sub">Pathology &amp; Diagnostic Laboratory</div>
+    </div>
+    <div class="right-col">
+      <div class="ph">Ph: 9169947371</div>
+      <div class="em">abhishek.anddev@gmail.com</div>
+      <div class="addr">Krishna Nagar kachhauna, sandia</div>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <div class="after-div"></div>
+
+  <!-- Patient grid -->
+  <div class="pgrid">
+    <div class="pcol-left">
+      <div class="kv"><span class="k">Patient Name</span><span class="colon">:</span><span class="v big">Rahul</span></div>
+      <div class="kv"><span class="k">Age / Sex</span><span class="colon">:</span><span class="v">36 Yrs / Male</span></div>
+      <div class="kv"><span class="k">Phone</span><span class="colon">:</span><span class="v">9169947371</span></div>
+    </div>
+    <div class="pcol-mid">
+      <div class="bc-row">
+        <div class="barcode"></div>
+        <div class="bc-text">704_dyhkxl</div>
+      </div>
+      <div class="kv"><span class="k">Reg. Date</span><span class="colon">:</span><span class="v">14/06/2026</span></div>
+      <div class="kv"><span class="k">Collection</span><span class="colon">:</span><span class="v">14/06/2026</span></div>
+      <div class="kv"><span class="k">Report Date</span><span class="colon">:</span><span class="v">14/06/2026</span></div>
+    </div>
+    <div class="pcol-right">
+      <div class="qr" id="qr"></div>
+      <div class="qr-code">EP-SFTV5E</div>
+      <div class="qr-scan">Scan to Verify</div>
+    </div>
+  </div>
+  <div class="after-box"></div>
+
+  <!-- Test title -->
+  <div class="test-title">CBC (COMPLETE BLOOD COUNT)</div>
+
+  <!-- Results table -->
+  <table class="res">
+    <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+    <thead>
+      <tr>
+        <th class="l">TEST NAME</th>
+        <th class="c">VALUE</th>
+        <th class="c">UNIT</th>
+        <th class="c">REFERENCE RANGE</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="tname bold">Hemoglobin</td>
+        <td class="val bold abn">9.6 (L)</td>
+        <td class="unit">gm%</td>
+        <td class="ref">13.5-17.5</td>
+      </tr>
+      <tr>
+        <td class="tname bold">Total Leucocyte Count</td>
+        <td class="val bold abn">12100 (H)</td>
+        <td class="unit">/cumm</td>
+        <td class="ref">4000-10000</td>
+      </tr>
+
+      <tr class="sec"><td colspan="4"><div class="sec-inner"><span class="sec-bar"></span><span class="sec-name">Differential Leucocyte Count</span></div></td></tr>
+      <tr>
+        <td class="tname indent bold">Neutrophils</td>
+        <td class="val bold abn">84.2 (H)</td>
+        <td class="unit">%</td>
+        <td class="ref">40-80</td>
+      </tr>
+
+      <tr class="sec"><td colspan="4"><div class="sec-inner"><span class="sec-bar"></span><span class="sec-name">Absolute Leucocyte Count</span></div></td></tr>
+      <tr>
+        <td class="tname indent bold">Neutrophils</td>
+        <td class="val bold abn">10200 (H)</td>
+        <td class="unit">/cumm</td>
+        <td class="ref">2000-7000</td>
+      </tr>
+
+      <tr class="sec"><td colspan="4"><div class="sec-inner"><span class="sec-bar"></span><span class="sec-name">Differential Leucocyte Count</span></div></td></tr>
+      <tr>
+        <td class="tname indent bold">Lymphocytes</td>
+        <td class="val bold abn">8.2 (L)</td>
+        <td class="unit">%</td>
+        <td class="ref">20-40</td>
+      </tr>
+
+      <tr class="sec"><td colspan="4"><div class="sec-inner"><span class="sec-bar"></span><span class="sec-name">Absolute Leucocyte Count</span></div></td></tr>
+      <tr>
+        <td class="tname indent">Lymphocytes</td>
+        <td class="val">1000</td>
+        <td class="unit">/cumm</td>
+        <td class="ref">1000-3000</td>
+      </tr>
+
+      <tr class="sec"><td colspan="4"><div class="sec-inner"><span class="sec-bar"></span><span class="sec-name">Differential Leucocyte Count</span></div></td></tr>
+      <tr>
+        <td class="tname indent">Monocytes</td>
+        <td class="val">7.6</td>
+        <td class="unit">%</td>
+        <td class="ref">2-10</td>
+      </tr>
+
+      <tr class="sec"><td colspan="4"><div class="sec-inner"><span class="sec-bar"></span><span class="sec-name">Absolute Leucocyte Count</span></div></td></tr>
+      <tr>
+        <td class="tname indent">Monocytes</td>
+        <td class="val">900</td>
+        <td class="unit">/cumm</td>
+        <td class="ref">200-1000</td>
+      </tr>
+
+      <tr class="sec"><td colspan="4"><div class="sec-inner"><span class="sec-bar"></span><span class="sec-name">RBC Indices</span></div></td></tr>
+      <tr>
+        <td class="tname indent bold">RBC Count</td>
+        <td class="val bold abn">3.43 (L)</td>
+        <td class="unit">Million/cumm</td>
+        <td class="ref">4.5-5.5</td>
+      </tr>
+      <tr>
+        <td class="tname indent bold">Hct</td>
+        <td class="val bold abn">30.0 (L)</td>
+        <td class="unit">%</td>
+        <td class="ref">40-50</td>
+      </tr>
+      <tr>
+        <td class="tname indent">MCV</td>
+        <td class="val">87.5</td>
+        <td class="unit">fL</td>
+        <td class="ref">81-101</td>
+      </tr>
+      <tr>
+        <td class="tname indent">MCH</td>
+        <td class="val">28.0</td>
+        <td class="unit">pg</td>
+        <td class="ref">27-32</td>
+      </tr>
+      <tr>
+        <td class="tname indent">MCH</td>
+        <td class="val">31.9</td>
+        <td class="unit">g/dL</td>
+        <td class="ref">31.5-34.5</td>
+      </tr>
+      <tr>
+        <td class="tname indent bold">RDW-CV</td>
+        <td class="val bold abn">14.1 (H)</td>
+        <td class="unit">%</td>
+        <td class="ref">11.6-14.0</td>
+      </tr>
+      <tr>
+        <td class="tname indent">RDW-SD</td>
+        <td class="val">42.8</td>
+        <td class="unit">fL</td>
+        <td class="ref">39-46</td>
+      </tr>
+
+      <tr class="sec"><td colspan="4"><div class="sec-inner"><span class="sec-bar"></span><span class="sec-name">Platelets Indices</span></div></td></tr>
+      <tr>
+        <td class="tname indent">Platelet Count</td>
+        <td class="val">312000</td>
+        <td class="unit">/cumm</td>
+        <td class="ref">150000-410000</td>
+      </tr>
+      <tr>
+        <td class="tname indent">PCT</td>
+        <td class="val">0.328</td>
+        <td class="unit">%</td>
+        <td class="ref">0.18-0.39</td>
+      </tr>
+      <tr>
+        <td class="tname indent">MPV</td>
+        <td class="val">10.5</td>
+        <td class="unit">fL</td>
+        <td class="ref">7.5-11.5</td>
+      </tr>
+      <tr>
+        <td class="tname indent bold">PDW</td>
+        <td class="val bold abn">16.5 (H)</td>
+        <td class="unit">fL</td>
+        <td class="ref">11.0-15.5</td>
+      </tr>
+      <tr>
+        <td class="tname indent">P-LCR</td>
+        <td class="val">31.4</td>
+        <td class="unit">%</td>
+        <td class="ref">11.0-45.0</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="end-report">*** End of Report ***</div>
+
+  <div class="interp">
+    <div class="t">Interpretation / Observation:</div>
+    <div class="b"><strong>Clinical Notes:</strong> Microcytic hypochromic picture with mild leucocytosis and neutrophilia; correlate clinically and consider iron studies if indicated.</div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="sig-row">
+      <div class="sig">
+        <div class="line"></div>
+        <div class="nm">&nbsp;</div>
+        <div class="ql">Lab Technician</div>
+        <div class="rg">&nbsp;</div>
+      </div>
+      <div class="sig right">
+        <div class="line"></div>
+        <div class="nm">&nbsp;</div>
+        <div class="ql">Consultant Pathologist</div>
+        <div class="rg">&nbsp;</div>
+      </div>
+    </div>
+    <div class="wish">Wishing you a speedy recovery and good health.</div>
+    <div class="frule"></div>
+    <div class="notvalid">NOT VALID FOR MEDICO LEGAL PURPOSE</div>
+    <div class="alarm">In case of any alarming / unexpected results, kindly contact the laboratory for re-confirmation.</div>
+    <div class="fbot">
+      <span class="l">ABHISHEK</span>
+      <span class="r">Page 1 of 2</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // QR checkerboard with solid corner finder squares
+  (function () {
+    var qr = document.getElementById('qr');
+    var N = 11;
+    var cells = [];
+    for (var r = 0; r < N; r++) for (var c = 0; c < N; c++) cells.push([r, c]);
+    function inCorner(r, c) {
+      // 3x3 finder squares at three corners
+      var corners = [[0,0],[0,N-3],[N-3,0]];
+      for (var i = 0; i < corners.length; i++) {
+        var br = corners[i][0], bc = corners[i][1];
+        if (r >= br && r < br+3 && c >= bc && c < bc+3) {
+          // hollow ring: outer black, inner black center, middle white
+          if (r === br || r === br+2 || c === bc || c === bc+2) return 1;
+          if (r === br+1 && c === bc+1) return 1;
+          return 2; // white gap
+        }
+      }
+      return 0;
+    }
+    cells.forEach(function (rc) {
+      var r = rc[0], c = rc[1];
+      var el = document.createElement('i');
+      var st = inCorner(r, c);
+      var black;
+      if (st === 1) black = true;
+      else if (st === 2) black = false;
+      else black = ((r * 7 + c * 13 + r * c * 3) % 5) < 2; // deterministic pseudo-random
+      if (black) el.className = 'b';
+      qr.appendChild(el);
+    });
+  })();
+</script>
+</body>
+</html>
