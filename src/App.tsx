@@ -18,6 +18,8 @@ import { Staff } from "./pages/Staff";
 import { ActivityLog } from "./pages/ActivityLog";
 import { VerifyEmail } from "./pages/VerifyEmail";
 import { Onboarding } from "./pages/Onboarding";
+import { Subscription } from "./pages/Subscription";
+import { Profile } from "./pages/Profile";
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -78,6 +80,8 @@ export default function App() {
       <Route path="/app/config" element={<RequireAuth><ReportConfig /></RequireAuth>} />
       <Route path="/app/staff" element={<RequireAuth><Staff /></RequireAuth>} />
       <Route path="/app/activity" element={<RequireAuth><ActivityLog /></RequireAuth>} />
+      <Route path="/app/subscription" element={<RequireAuth><Subscription /></RequireAuth>} />
+      <Route path="/app/profile" element={<RequireAuth><Profile /></RequireAuth>} />
 
       <Route path="/app" element={<Navigate to="/app/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

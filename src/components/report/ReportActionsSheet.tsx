@@ -1,6 +1,9 @@
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, Download, Send, Link2, Pencil, Receipt, X, FileText } from "lucide-react";
+import { Eye, Download, Send, Link2, Pencil, Receipt, X, FileText, Trash2, Loader2 } from "lucide-react";
 import { useHospitalId } from "../../lib/auth";
+import { useDeleteReport, useTestCatalog } from "../../hooks/useLabData";
+import { CreateInvoiceModal, type InvoiceSeed } from "../../pages/Invoices";
 import type { LabReport } from "../../lib/types";
 
 /**
@@ -10,14 +13,59 @@ import type { LabReport } from "../../lib/types";
 export function ReportActionsSheet({ report, onClose }: { report: LabReport; onClose: () => void }) {
   const nav = useNavigate();
   const hid = useHospitalId();
+  const del = useDeleteReport();
+  const catalog = useTestCatalog();
+  const [deleting, setDeleting] = useState(false);
+  const [invoicing, setInvoicing] = useState(false);
 
   const verifyUrl = `${window.location.origin}/verify?r=${hid}/${report.id}`;
   const pdfUrl = report.pdfUrl as string | undefined;
   const billed = !!report.invoiceId;
 
+  // Seed the invoice from the report — one line item per test, priced from the
+  // catalog (falling back to the report's stored total). Mirrors the mobile
+  // "Generate invoice" flow which pre-fills tests + patient details.
+  const invoiceSeed = useMemo<InvoiceSeed>(() => {
+    const priceByName = new Map<string, number>();
+    for (const c of catalog.data ?? []) priceByName.set(c.testName, c.price ?? 0);
+
+    const testNames = report.sections?.length
+      ? report.sections.map((s) => s.testType)
+      : report.testType
+        ? report.testType.split(",").map((t) => t.trim()).filter(Boolean)
+        : [];
+
+    let items = testNames.map((name) => ({ particulars: name, rate: priceByName.get(name) ?? 0 }));
+    // Single-test report with no catalog price → use the stored total.
+    if (items.length === 1 && !items[0].rate && report.price) items = [{ particulars: items[0].particulars, rate: report.price }];
+    if (items.length === 0 && report.price) items = [{ particulars: report.testType || "Lab test", rate: report.price }];
+
+    return {
+      patientName: report.patientName,
+      phone: report.phone,
+      age: report.formData?.age != null ? String(report.formData.age) : undefined,
+      gender: report.formData?.gender,
+      patientUhid: (report as { patientId?: string }).patientId,
+      reportId: report.id,
+      items,
+    };
+  }, [report, catalog.data]);
+
   function go(path: string) {
     onClose();
     nav(path);
+  }
+
+  async function onDelete() {
+    if (!confirm(`Delete report for ${report.patientName || "this patient"}? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await del.mutateAsync(report.id);
+      onClose();
+    } catch (e) {
+      alert("Could not delete report: " + (e as Error).message);
+      setDeleting(false);
+    }
   }
 
   async function copyLink() {
@@ -65,9 +113,31 @@ export function ReportActionsSheet({ report, onClose }: { report: LabReport; onC
           <Action icon={<Pencil size={20} />} color="#E67E22" title="Edit report" subtitle="Modify values and re-generate the PDF" onClick={() => go(`/app/reports/${report.id}/verify`)} />
 
           <div className="px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-faint)]">Invoice</div>
-          <Action icon={<Receipt size={20} />} color="#2E7D32" title={billed ? "View billing" : "Generate invoice"} subtitle={billed ? "Open the billing page" : "Create a bill for this report"} onClick={() => go("/app/invoices")} />
+          <Action
+            icon={<Receipt size={20} />}
+            color="#2E7D32"
+            title={billed ? "View billing" : "Generate invoice"}
+            subtitle={billed ? "Open the billing page" : "Create a bill pre-filled from this report"}
+            onClick={() => (billed ? go("/app/invoices") : setInvoicing(true))}
+          />
+
+          <div className="px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-faint)]">Danger zone</div>
+          <Action
+            icon={deleting ? <Loader2 size={20} className="animate-spin" /> : <Trash2 size={20} />}
+            color="#DC2626"
+            title="Delete report"
+            subtitle="Permanently remove this report"
+            onClick={deleting ? () => {} : onDelete}
+          />
         </div>
       </div>
+
+      {invoicing && (
+        <CreateInvoiceModal
+          seed={invoiceSeed}
+          onClose={() => { setInvoicing(false); onClose(); }}
+        />
+      )}
     </div>
   );
 }

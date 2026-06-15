@@ -62,8 +62,15 @@ export interface SessionUser {
   hospitalId: string | null;
   hospitalName: string | null;
   role: string | null;
+  /** "lab" | "hospital" — read from hospitals/{hid}.org_type. */
+  orgType: string | null;
   demo?: boolean;
 }
+
+/** Error code thrown when a hospital/doctor account tries to use the lab portal. */
+export const ERR_WRONG_PORTAL = "lab/wrong-portal";
+const WRONG_PORTAL_MESSAGE =
+  "This portal is for Ekansh Lab accounts only. This account is registered as a Doctor / Hospital account, so it can't sign in here. Please use the correct portal for your account type.";
 
 interface AuthState {
   user: SessionUser | null;
@@ -96,24 +103,48 @@ async function resolveProfile(u: User): Promise<SessionUser> {
     hospitalId: null,
     hospitalName: null,
     role: null,
+    orgType: null,
   };
   if (!db) return base;
   try {
     const snap = await getDoc(doc(db, "users", u.uid));
     if (snap.exists()) {
       const d = snap.data() as Record<string, unknown>;
+      const hospitalId = (d.hospital_id as string) || null;
+      let orgType: string | null = (d.org_type as string) || null;
+      // org_type lives on the hospital doc — fetch it so we can gate non-lab orgs.
+      if (hospitalId && !orgType) {
+        try {
+          const hsnap = await getDoc(doc(db, "hospitals", hospitalId));
+          if (hsnap.exists()) orgType = ((hsnap.data() as Record<string, unknown>).org_type as string) || null;
+        } catch { /* ignore */ }
+      }
       return {
         ...base,
         name: (d.name as string) || base.name,
-        hospitalId: (d.hospital_id as string) || null,
+        hospitalId,
         hospitalName: (d.hospital_name as string) || null,
         role: (d.role as string) || null,
+        orgType,
       };
     }
   } catch {
     /* offline / rules — keep base */
   }
   return base;
+}
+
+/** Throw if the signed-in user belongs to a non-lab org. Signs them out first. */
+async function enforceLabOrg(profile: SessionUser): Promise<void> {
+  // Only enforce once a hospital is linked. Pending/unverified accounts (no
+  // hospitalId yet) fall through to the existing verify-email / onboarding flow.
+  if (!profile.hospitalId || !profile.orgType) return;
+  if (profile.orgType !== "lab") {
+    if (auth) await fbSignOut(auth);
+    const err = new Error(WRONG_PORTAL_MESSAGE) as Error & { code?: string };
+    err.code = ERR_WRONG_PORTAL;
+    throw err;
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -126,14 +157,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     return onAuthStateChanged(auth, async (u) => {
-      setUser(u ? await resolveProfile(u) : null);
+      if (!u) { setUser(null); setLoading(false); return; }
+      const profile = await resolveProfile(u);
+      // Doctor/hospital accounts must not land in the lab UI — sign them out.
+      if (profile.hospitalId && profile.orgType && profile.orgType !== "lab") {
+        try { await fbSignOut(auth!); } catch { /* ignore */ }
+        setUser(null);
+      } else {
+        setUser(profile);
+      }
       setLoading(false);
     });
   }, []);
 
   const signIn = async (email: string, password: string) => {
     if (!auth) throw new Error("Firebase not configured");
-    await signInWithEmailAndPassword(auth, email, password);
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    // Resolve before letting onAuthStateChanged settle, so the wrong-portal
+    // error surfaces synchronously inside the Login submit handler.
+    const profile = await resolveProfile(cred.user);
+    await enforceLabOrg(profile);
   };
 
   const signUp = async (params: SignUpParams) => {

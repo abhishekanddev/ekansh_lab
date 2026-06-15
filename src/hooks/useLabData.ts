@@ -321,6 +321,38 @@ export function useStaff() {
   });
 }
 
+/* ── Current user profile (users/{uid}) ─────────────────────────────────── */
+export interface UserProfile {
+  name?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  hospital_id?: string;
+  hospital_name?: string;
+  designation?: string;
+}
+
+export function useMyProfile(uid?: string) {
+  return useQuery({
+    queryKey: ["profile", uid],
+    enabled: !!uid,
+    queryFn: async () => {
+      const snap = await getDoc(fbDoc(requireDb(), "users", uid!));
+      return (snap.exists() ? snap.data() : {}) as UserProfile;
+    },
+  });
+}
+
+export function useSaveMyProfile(uid?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: Partial<UserProfile>) => {
+      await setDoc(fbDoc(requireDb(), "users", uid!), patch, { merge: true });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["profile", uid] }),
+  });
+}
+
 /* ── Activity log ───────────────────────────────────────────────────────── */
 export function useActivityLog() {
   const hid = useHospitalId();

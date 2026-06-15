@@ -3,9 +3,12 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, FilePlus2, FileText, FlaskConical, Users, Receipt,
   SlidersHorizontal, UsersRound, ScrollText, Search, Bell, Building2,
-  ChevronDown, LogOut, Beaker,
+  ChevronDown, LogOut, Beaker, Crown, AlertTriangle, Clock, UserCircle,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import { useSubscription } from "../hooks/useSubscription";
+import { TIER_LABEL, daysRemaining, isExpired, isExpiringSoon, isPaid } from "../lib/subscription";
 
 const NAV = [
   { group: "Workspace" },
@@ -20,10 +23,24 @@ const NAV = [
   { to: "/app/config", label: "Report Config", icon: SlidersHorizontal },
   { to: "/app/staff", label: "Staff", icon: UsersRound },
   { to: "/app/activity", label: "Activity Log", icon: ScrollText },
+  { to: "/app/subscription", label: "Subscription", icon: Crown },
+  { to: "/app/profile", label: "My Account", icon: UserCircle },
 ] as const;
+
+/** Friendly label for a user's role — never surfaces the raw "hospital" owner role. */
+function roleLabel(role?: string | null): string {
+  switch ((role || "").toLowerCase()) {
+    case "hospital":
+    case "owner":
+    case "admin": return "Lab Admin";
+    case "staff": return "Staff";
+    default: return "Lab";
+  }
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
+  const { data: sub } = useSubscription();
   const [confirmLogout, setConfirmLogout] = useState(false);
   const initials = (user?.name || "U").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
@@ -86,11 +103,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           </div>
           <div className="flex-1" />
+          <SubscriptionBadge sub={sub} />
           <button className="flex items-center gap-2 px-2.5 h-9 border border-[var(--color-border)] rounded-md text-sm hover:bg-[var(--color-bg)]">
             <Building2 size={16} className="text-[var(--color-primary-600)]" />
             <span className="hidden lg:block leading-tight text-left">
               <span className="block font-semibold text-[12.5px]">{user?.hospitalName || "My Lab"}</span>
-              <span className="block text-[11px] text-[var(--color-muted)] capitalize">{user?.role || "Lab"}</span>
+              <span className="block text-[11px] text-[var(--color-muted)]">Lab</span>
             </span>
             <ChevronDown size={14} className="text-[var(--color-faint)]" />
           </button>
@@ -98,11 +116,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Bell size={18} />
           </button>
           <div className="flex items-center gap-2 pl-1">
-            <span className="w-8 h-8 grid place-items-center rounded-full bg-[var(--color-primary-600)] text-white text-xs font-semibold">{initials}</span>
-            <span className="hidden md:block leading-tight">
-              <span className="block font-semibold text-[13px]">{user?.name}</span>
-              <span className="block text-[11px] text-[var(--color-muted)] capitalize">{user?.role || "staff"}</span>
-            </span>
+            <Link to="/app/profile" title="My account" className="flex items-center gap-2 hover:opacity-80">
+              <span className="w-8 h-8 grid place-items-center rounded-full bg-[var(--color-primary-600)] text-white text-xs font-semibold">{initials}</span>
+              <span className="hidden md:block leading-tight">
+                <span className="block font-semibold text-[13px]">{user?.name}</span>
+                <span className="block text-[11px] text-[var(--color-muted)]">{roleLabel(user?.role)}</span>
+              </span>
+            </Link>
             <button onClick={() => setConfirmLogout(true)} title="Sign out" className="ml-1 w-9 h-9 grid place-items-center border border-[var(--color-border)] rounded-md text-[var(--color-muted)] hover:bg-[var(--color-bg)]">
               <LogOut size={16} />
             </button>
@@ -128,5 +148,39 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main className="flex-1 p-6">{children}</main>
       </div>
     </div>
+  );
+}
+
+/** Compact "X days left" / "Trial" / "Expired" badge linking to the Subscription page. */
+function SubscriptionBadge({ sub }: { sub: ReturnType<typeof useSubscription>["data"] }) {
+  if (!sub) return null;
+  const days = daysRemaining(sub);
+  const expired = isExpired(sub);
+  const soon = isExpiringSoon(sub);
+  const paid = isPaid(sub);
+
+  let label: string;
+  let Icon = Clock;
+  let cls = "bg-[var(--color-primary-50)] text-[var(--color-primary-700)] border-[var(--color-primary-300)]";
+  if (expired) {
+    label = "Expired";
+    Icon = AlertTriangle;
+    cls = "bg-red-50 text-[var(--color-danger)] border-red-200";
+  } else if (paid && days != null) {
+    label = `${days} ${days === 1 ? "day" : "days"} left`;
+    if (soon) cls = "bg-orange-50 text-orange-700 border-orange-200";
+  } else {
+    label = TIER_LABEL[sub.tier];
+  }
+
+  return (
+    <Link
+      to="/app/subscription"
+      title="Manage subscription"
+      className={`hidden md:inline-flex items-center gap-1.5 h-9 px-2.5 rounded-md border text-[12.5px] font-semibold ${cls}`}
+    >
+      <Icon size={14} />
+      <span>{label}</span>
+    </Link>
   );
 }

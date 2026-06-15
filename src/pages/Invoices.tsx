@@ -75,14 +75,28 @@ export function Invoices() {
   );
 }
 
-function CreateInvoiceModal({ onClose }: { onClose: () => void }) {
+type LineItemDraft = { particulars: string; rate: string; quantity: string; discountPercent: string; taxPercent: string };
+
+export interface InvoiceSeed {
+  patientName?: string;
+  phone?: string;
+  age?: string;
+  gender?: string;
+  patientUhid?: string;
+  reportId?: string;
+  items?: { particulars: string; rate: number }[];
+}
+
+export function CreateInvoiceModal({ onClose, seed }: { onClose: () => void; seed?: InvoiceSeed }) {
   const create = useCreateInvoice();
-  const [patientName, setPatientName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [patientName, setPatientName] = useState(seed?.patientName ?? "");
+  const [phone, setPhone] = useState(seed?.phone ?? "");
   const [paymentMode, setPaymentMode] = useState("Cash");
-  const [items, setItems] = useState<{ particulars: string; rate: string; quantity: string; discountPercent: string; taxPercent: string }[]>([
-    { particulars: "", rate: "", quantity: "1", discountPercent: "0", taxPercent: "0" },
-  ]);
+  const [items, setItems] = useState<LineItemDraft[]>(
+    seed?.items?.length
+      ? seed.items.map((it) => ({ particulars: it.particulars, rate: String(it.rate || ""), quantity: "1", discountPercent: "0", taxPercent: "0" }))
+      : [{ particulars: "", rate: "", quantity: "1", discountPercent: "0", taxPercent: "0" }],
+  );
 
   const computed = useMemo(() => {
     const lines: InvoiceLineItem[] = items.map((it) => {
@@ -112,6 +126,8 @@ function CreateInvoiceModal({ onClose }: { onClose: () => void }) {
   async function submit() {
     const input: CreateInvoiceInput = {
       patientName, phone,
+      age: seed?.age, gender: seed?.gender, patientUhid: seed?.patientUhid,
+      reportId: seed?.reportId,
       lineItems: computed.lines,
       billAmount: computed.billAmount,
       discountTotal: computed.discountTotal,

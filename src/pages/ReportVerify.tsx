@@ -4,6 +4,7 @@ import { ArrowLeft, Save, Sparkles } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Spinner, EmptyState } from "../components/ui";
 import { ResultEntry } from "../components/report/ResultEntry";
+import { InterpretationPreview } from "../components/report/InterpretationPreview";
 import { useReport, useSaveReport } from "../hooks/useLabData";
 import { computeFlag } from "../lib/labLogic";
 import { generateInterpretation } from "../lib/interpretationEngine";
@@ -17,30 +18,35 @@ export function ReportVerify() {
 
   const [results, setResults] = useState<LabParameter[]>([]);
   const [observation, setObservation] = useState("");
+  const [showInterp, setShowInterp] = useState(false);
   const [activeSection, setActiveSection] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const isBatch = !!data?.sections?.length;
+  const activeTestType = isBatch ? (data?.sections?.[activeSection].testType ?? "") : (data?.testType ?? "");
 
   useEffect(() => {
     if (!data) return;
     if (data.sections?.length) {
       setResults(data.sections[0].results ?? []);
       setObservation(data.sections[0].observation ?? "");
+      setShowInterp(data.sections[0].showInterpretation === true);
     } else {
       setResults(data.results ?? []);
       setObservation(data.observation ?? "");
+      setShowInterp(data.showInterpretation === true);
     }
   }, [data]);
 
   function switchSection(i: number) {
     // persist current edits back into data.sections before switching
     if (data?.sections) {
-      data.sections[activeSection] = { ...data.sections[activeSection], results, observation };
+      data.sections[activeSection] = { ...data.sections[activeSection], results, observation, showInterpretation: showInterp };
     }
     setActiveSection(i);
     setResults(data?.sections?.[i].results ?? []);
     setObservation(data?.sections?.[i].observation ?? "");
+    setShowInterp(data?.sections?.[i].showInterpretation === true);
   }
 
   function recomputeFlags() {
@@ -62,12 +68,13 @@ export function ReportVerify() {
         createdAt: data.createdAt, // preserve — don't reset timestamp
       };
       if (isBatch && data.sections) {
-        const sections = data.sections.map((s, i) => (i === activeSection ? { ...s, results, observation } : s));
+        const sections = data.sections.map((s, i) => (i === activeSection ? { ...s, results, observation, showInterpretation: showInterp } : s));
         payload.sections = sections;
         payload.parameterCount = sections.reduce((n, s) => n + (s.results?.length ?? 0), 0);
       } else {
         payload.results = results;
         payload.observation = observation;
+        payload.showInterpretation = showInterp;
         payload.parameterCount = results.length;
       }
       await saveReport.mutateAsync(payload);
@@ -122,6 +129,20 @@ export function ReportVerify() {
           onChange={(e) => setObservation(e.target.value)}
           placeholder="Clinical observation / interpretation notes…"
         />
+
+        <label className="flex items-center gap-2 mt-4 text-[13px] font-medium select-none cursor-pointer">
+          <input type="checkbox" checked={showInterp} onChange={(e) => setShowInterp(e.target.checked)} />
+          Include interpretation in PDF
+        </label>
+
+        {showInterp && (
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-4 mt-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-faint)] mb-2">
+              Interpretation preview
+            </div>
+            <InterpretationPreview testType={activeTestType} results={results} />
+          </div>
+        )}
       </div>
     </div>
   );

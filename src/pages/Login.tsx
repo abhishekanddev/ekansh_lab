@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Beaker, Lock, ShieldCheck } from "lucide-react";
-import { useAuth } from "../lib/auth";
+import { useAuth, ERR_WRONG_PORTAL } from "../lib/auth";
 
 type Mode = "signin" | "signup";
 
@@ -56,11 +56,13 @@ export function Login() {
       // Keep busy=true; the effect navigates once the user resolves.
     } catch (err: any) {
       const code = err?.code as string | undefined;
-      if (code === "auth/email-already-in-use") setError("This email is already registered. Please sign in.");
+      if (code === ERR_WRONG_PORTAL) setError(err.message);
+      else if (code === "auth/email-already-in-use") setError("This email is already registered. If it's a Doctor / Hospital account, it can't be used on the Ekansh Lab portal — please sign in with a Lab account.");
       else if (code === "auth/invalid-credential" || code === "auth/wrong-password") setError("Invalid email or password.");
       else if (code === "auth/user-not-found") setError("No account found.");
       else setError(err?.message || "Authentication failed");
       setBusy(false);
+      setPending(null);
     }
   }
 
@@ -147,6 +149,15 @@ export function Login() {
               {mode === "signin" ? "New lab? Create an account" : "Already have an account? Sign in"}
             </button>
           </div>
+
+          <p className="text-center text-[11.5px] text-[var(--color-faint)] mt-6 leading-relaxed">
+            By {mode === "signin" ? "signing in" : "creating an account"}, you agree to our{" "}
+            <a href="https://dukannwalaa-70a0b.web.app/terms-of-service" target="_blank" rel="noreferrer"
+              className="text-[var(--color-primary-600)] hover:underline">Terms of Service</a>
+            {" "}and{" "}
+            <a href="https://dukannwalaa-70a0b.web.app/privacy-policy" target="_blank" rel="noreferrer"
+              className="text-[var(--color-primary-600)] hover:underline">Privacy Policy</a>.
+          </p>
         </div>
       </div>
     </div>

@@ -41,9 +41,11 @@ export interface LabReport {
   referredById?: string;
   formData?: ReportFormData;
   results?: LabParameter[];
+  /** Single-test reports only — when false, the PDF omits the interpretation block. */
+  showInterpretation?: boolean;
   /** Multi-test batch reports carry sections instead of a single results list. */
   batchId?: string;
-  sections?: { testType: string; results: LabParameter[]; observation?: string }[];
+  sections?: { testType: string; results: LabParameter[]; observation?: string; showInterpretation?: boolean }[];
   invoiceId?: string;
   createdAt?: unknown; // Firestore Timestamp | serverTimestamp
 }

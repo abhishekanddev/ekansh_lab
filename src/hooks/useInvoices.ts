@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { runTransaction, doc as fbDoc, serverTimestamp } from "firebase/firestore";
+import { runTransaction, doc as fbDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { requireDb, hospitalCol, hospitalDoc, COL } from "../lib/db";
 import { useHospitalId } from "../lib/auth";
 import type { InvoiceLineItem } from "../lib/types";
@@ -69,8 +69,16 @@ export function useCreateInvoice() {
         return { id: docRef.id, invoiceNumber: data.invoiceNumber };
       });
 
+      // Link the invoice back onto the report (mirrors InvoiceService.createInvoice).
+      if (input.reportId) {
+        await setDoc(hospitalDoc(hid!, COL.reports, input.reportId), { invoiceId: result.id }, { merge: true });
+      }
+
       return result;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices", hid] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices", hid] });
+      qc.invalidateQueries({ queryKey: ["reports", hid] });
+    },
   });
 }

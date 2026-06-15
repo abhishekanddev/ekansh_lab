@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Check, Search, Save, UserCheck, Plus, X } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { ResultEntry } from "../components/report/ResultEntry";
+import { InterpretationPreview } from "../components/report/InterpretationPreview";
 import { ReferredByField, referrerDisplayName } from "../components/report/ReferredByField";
 import { LAB_TEST_TEMPLATES, TEST_CATEGORIES, type CyclePhase } from "../data/labTestTemplates";
 import { buildInitialResults, genId, normalizePhone } from "../lib/reportBuilder";
@@ -10,8 +11,11 @@ import { createVerificationEntry } from "../lib/verification";
 import { CYCLE_PHASE_LABELS } from "../lib/labLogic";
 import type { LabParameter, Referrer } from "../lib/types";
 import { useSaveReport, useUpsertPatientUhid, usePatientByPhone, useTestCatalog } from "../hooks/useLabData";
+import { useSubscription } from "../hooks/useSubscription";
+import { canCreateReport, isExpired, remainingReports, TIER_LABEL } from "../lib/subscription";
 import { useAuth } from "../lib/auth";
 import { serverTimestamp } from "firebase/firestore";
+import { Link } from "react-router-dom";
 
 interface Patient {
   name: string; age: string; gender: string; phone: string;
@@ -26,6 +30,13 @@ export function NewReport() {
   const catalog = useTestCatalog();
   const saveReport = useSaveReport();
   const upsertPatient = useUpsertPatientUhid();
+  const { data: sub } = useSubscription();
+  const quotaBlocked = !!sub && !canCreateReport(sub);
+  const quotaReason = sub
+    ? isExpired(sub)
+      ? `Your ${TIER_LABEL[sub.tier]} subscription has expired. Please renew to create more reports.`
+      : `You've hit today's report limit on the ${TIER_LABEL[sub.tier]} plan. Upgrade or try again tomorrow.`
+    : "";
 
   const [step, setStep] = useState(0);
   const [patient, setPatient] = useState<Patient>({
@@ -52,6 +63,10 @@ export function NewReport() {
   }, [existing.data, patient.phone, appliedPhone]);
   const [selected, setSelected] = useState<string[]>([]);
   const [resultsMap, setResultsMap] = useState<Record<string, LabParameter[]>>({});
+  /** Per-test "Include interpretation in PDF" toggle. Default true, matches Flutter. */
+  const [showInterpMap, setShowInterpMap] = useState<Record<string, boolean>>({});
+  /** Per-test free-text Observation / Notes (mirrors mobile observation field). */
+  const [observationMap, setObservationMap] = useState<Record<string, string>>({});
   const [activeTest, setActiveTest] = useState<string>("");
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
@@ -121,6 +136,7 @@ export function NewReport() {
   const totalPrice = selected.reduce((s, n) => s + (priceByName.get(n) ?? 0), 0);
 
   async function onSave() {
+    if (quotaBlocked) return;
     setSaving(true);
     try {
       const phone = normalizePhone(patient.phone);
@@ -176,9 +192,16 @@ export function NewReport() {
           testType,
           parameterCount: results.length,
           results,
+          observation: observationMap[testType] ?? "",
+          showInterpretation: showInterpMap[testType] === true,
         });
       } else {
-        const sections = selected.map((t) => ({ testType: t, results: resultsMap[t] ?? [], observation: "" }));
+        const sections = selected.map((t) => ({
+          testType: t,
+          results: resultsMap[t] ?? [],
+          observation: observationMap[t] ?? "",
+          showInterpretation: showInterpMap[t] === true,
+        }));
         const totalParams = sections.reduce((s, sec) => s + sec.results.length, 0);
         await saveReport.mutateAsync({
           ...base,
@@ -198,6 +221,22 @@ export function NewReport() {
   return (
     <div>
       <PageHeader breadcrumb="Home / Reports / New" title="New Report" description="Create a lab report in three steps." />
+
+      {sub && (quotaBlocked || remainingReports(sub) <= 3) && (
+        <div className={`rounded-lg border p-3.5 mb-5 flex items-start gap-3 text-[13px] ${
+          quotaBlocked
+            ? "bg-red-50 border-red-200 text-[var(--color-danger)]"
+            : "bg-orange-50 border-orange-200 text-orange-800"
+        }`}>
+          <span className="font-semibold">{quotaBlocked ? "Cannot create report:" : "Heads up:"}</span>
+          <span className="flex-1">
+            {quotaBlocked
+              ? quotaReason
+              : `Only ${remainingReports(sub)} report${remainingReports(sub) === 1 ? "" : "s"} left today on the ${TIER_LABEL[sub.tier]} plan.`}
+          </span>
+          <Link to="/app/subscription" className="font-semibold underline shrink-0">View plans</Link>
+        </div>
+      )}
 
       {/* Stepper */}
       <div className="flex items-center gap-2 mb-6">
@@ -324,7 +363,41 @@ export function NewReport() {
             </div>
           </div>
           {activeTest && resultsMap[activeTest] && (
-            <ResultEntry testType={activeTest} results={resultsMap[activeTest]} onChange={(next) => setResultsMap({ ...resultsMap, [activeTest]: next })} />
+            <>
+              <ResultEntry testType={activeTest} results={resultsMap[activeTest]} onChange={(next) => setResultsMap({ ...resultsMap, [activeTest]: next })} />
+
+              {/* Observation + interpretation — mirrors the mobile report entry. */}
+              <div className="card p-5 mt-5 space-y-4">
+                <div>
+                  <label className="label">Observation / Notes</label>
+                  <textarea
+                    className="input min-h-[72px] resize-y"
+                    rows={2}
+                    value={observationMap[activeTest] ?? ""}
+                    onChange={(e) => setObservationMap({ ...observationMap, [activeTest]: e.target.value })}
+                    placeholder="Optional clinical notes for this test…"
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 text-[13px] font-medium select-none cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showInterpMap[activeTest] === true}
+                    onChange={(e) => setShowInterpMap({ ...showInterpMap, [activeTest]: e.target.checked })}
+                  />
+                  Include interpretation in PDF
+                </label>
+
+                {showInterpMap[activeTest] === true && (
+                  <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-faint)] mb-2">
+                      Interpretation preview
+                    </div>
+                    <InterpretationPreview testType={activeTest} results={resultsMap[activeTest]} />
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -343,7 +416,7 @@ export function NewReport() {
           <p className="text-[13px] text-[var(--color-muted)] mb-4">
             The report will be saved and visible in the Flutter app immediately. PDF generation is available from the report list.
           </p>
-          <button className="btn btn-primary" disabled={saving} onClick={onSave}>
+          <button className="btn btn-primary" disabled={saving || quotaBlocked} onClick={onSave} title={quotaBlocked ? quotaReason : undefined}>
             <Save size={16} /> {saving ? "Saving…" : "Save report"}
           </button>
         </div>

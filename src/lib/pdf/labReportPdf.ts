@@ -515,10 +515,11 @@ export async function buildReportDoc(report: LabReport, config: HospitalConfig, 
 
   const content: Content[] = [patientInfoGrid(report, assets, verificationCode)];
 
-  const renderTest = (testType: string, results: LabParameter[], observation?: string) => {
+  const renderTest = (testType: string, results: LabParameter[], observation: string | undefined, includeInterp: boolean) => {
     content.push(testTitle(testType));
     content.push(testBanner());
     content.push(...buildResultWidgets(results));
+    if (!includeInterp) return;
     const blocks = generateBlocks(testType, results);
     if (blocks && blocks.length) {
       content.push(interpretationBlocksContent(blocks));
@@ -529,14 +530,14 @@ export async function buildReportDoc(report: LabReport, config: HospitalConfig, 
 
   if (report.sections?.length) {
     report.sections.forEach((s, i) => {
-      renderTest(s.testType, s.results ?? [], s.observation);
+      renderTest(s.testType, s.results ?? [], s.observation, s.showInterpretation !== false);
       if (i < report.sections!.length - 1) {
         content.push({ text: `--- End of ${s.testType} ---`, color: MID_GREY, fontSize: 8, italics: true, alignment: "center", margin: [0, 6, 0, 4] });
         content.push({ canvas: [{ type: "line", x1: 0, y1: 4, x2: CONTENT_WIDTH, y2: 4, lineWidth: 0.5, lineColor: LINE_GREY }], margin: [0, 0, 0, 6] });
       }
     });
   } else {
-    renderTest(report.testType, report.results ?? [], report.observation);
+    renderTest(report.testType, report.results ?? [], report.observation, report.showInterpretation !== false);
   }
   content.push(endOfReport());
 
