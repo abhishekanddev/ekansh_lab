@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, FilePlus2, Download, Pencil, Trash2, FileDown } from "lucide-react";
+import { Search, FilePlus2, Download, Pencil, Trash2, FileDown, Loader2 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Spinner, EmptyState } from "../components/ui";
 import { useRecentReports, useDeleteReport } from "../hooks/useLabData";
@@ -80,7 +80,7 @@ export function ReportHistory() {
                         </a>
                       ) : (
                         <button title="Generate PDF" disabled={busyId === r.id} onClick={() => makePdf(r)} className="w-8 h-8 grid place-items-center rounded-md border border-[var(--color-border)] text-[var(--color-primary-600)] hover:bg-white disabled:opacity-50">
-                          <FileDown size={15} />
+                          {busyId === r.id ? <Loader2 className="animate-spin" size={15} /> : <FileDown size={15} />}
                         </button>
                       )}
                       <Link to={`/app/reports/${r.id}/verify`} title="Edit" className="w-8 h-8 grid place-items-center rounded-md border border-[var(--color-border)] text-[var(--color-muted)] hover:bg-white">
