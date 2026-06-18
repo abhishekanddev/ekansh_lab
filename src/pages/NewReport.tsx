@@ -10,7 +10,7 @@ import { buildInitialResults, genId, normalizePhone } from "../lib/reportBuilder
 import { createVerificationEntry } from "../lib/verification";
 import { CYCLE_PHASE_LABELS } from "../lib/labLogic";
 import type { LabParameter, Referrer } from "../lib/types";
-import { useSaveReport, useUpsertPatientUhid, usePatientByPhone, useTestCatalog } from "../hooks/useLabData";
+import { useSaveReport, useUpsertPatientUhid, usePatientByPhone, useTestCatalog, useSaveCatalogPrice } from "../hooks/useLabData";
 import { useSubscription } from "../hooks/useSubscription";
 import { canCreateReport, isExpired, remainingReports, TIER_LABEL } from "../lib/subscription";
 import { useAuth } from "../lib/auth";
@@ -30,6 +30,7 @@ export function NewReport() {
   const catalog = useTestCatalog();
   const saveReport = useSaveReport();
   const upsertPatient = useUpsertPatientUhid();
+  const saveCatalogPrice = useSaveCatalogPrice();
   const { data: sub } = useSubscription();
   const quotaBlocked = !!sub && !canCreateReport(sub);
   const quotaReason = sub
@@ -338,7 +339,10 @@ const totalPrice = selected.reduce((s, n) => s + effectivePrice(n), 0);
                       <span className="text-[12px] text-[var(--color-muted)]">₹</span>
                       <PriceInput
                         value={price}
-                        onCommit={(v) => setPriceOverrides((p) => ({ ...p, [t.testName]: v }))}
+                        onCommit={(v) => {
+                          setPriceOverrides((p) => ({ ...p, [t.testName]: v }));
+                          saveCatalogPrice.mutate({ testName: t.testName, category: t.category, price: v, isActive: true });
+                        }}
                       />
                     </div>
                   </div>

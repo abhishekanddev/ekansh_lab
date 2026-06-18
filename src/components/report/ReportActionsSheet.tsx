@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, Download, Printer, Send, Link2, Pencil, Receipt, X, FileText, Trash2, Loader2, RefreshCw } from "lucide-react";
 import { useHospitalId } from "../../lib/auth";
-import { useDeleteReport, useTestCatalog } from "../../hooks/useLabData";
+import { useDeleteReport, useTestCatalog, useReport } from "../../hooks/useLabData";
 import { useGenerateReportPdf } from "../../hooks/usePdf";
 import { CreateInvoiceModal, type InvoiceSeed } from "../../pages/Invoices";
 import type { LabReport } from "../../lib/types";
@@ -11,7 +11,7 @@ import type { LabReport } from "../../lib/types";
  * Actions sheet for a lab report — web equivalent of Flutter's PdfActionsSheet.
  * Preview / download PDF, WhatsApp share, copy verify link, edit, and invoice.
  */
-export function ReportActionsSheet({ report, onClose }: { report: LabReport; onClose: () => void }) {
+export function ReportActionsSheet({ report: initialReport, onClose }: { report: LabReport; onClose: () => void }) {
   const nav = useNavigate();
   const hid = useHospitalId();
   const del = useDeleteReport();
@@ -19,6 +19,10 @@ export function ReportActionsSheet({ report, onClose }: { report: LabReport; onC
   const [deleting, setDeleting] = useState(false);
   const [invoicing, setInvoicing] = useState(false);
   const generatePdf = useGenerateReportPdf();
+
+  // Subscribe to live data so pdfUrl updates once PDF generation completes.
+  const { data: liveReport } = useReport(initialReport.id);
+  const report = liveReport ?? initialReport;
 
   const verifyUrl = `${window.location.origin}/verify?r=${hid}/${report.id}`;
   const pdfUrl = report.pdfUrl as string | undefined;
