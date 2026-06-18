@@ -11,6 +11,7 @@ import { createVerificationEntry } from "../lib/verification";
 import { CYCLE_PHASE_LABELS } from "../lib/labLogic";
 import type { LabParameter, Referrer } from "../lib/types";
 import { useSaveReport, useUpsertPatientUhid, usePatientByPhone, useTestCatalog, useSaveCatalogPrice } from "../hooks/useLabData";
+import { useGenerateReportPdf } from "../hooks/usePdf";
 import { useSubscription } from "../hooks/useSubscription";
 import { canCreateReport, isExpired, remainingReports, TIER_LABEL } from "../lib/subscription";
 import { useAuth } from "../lib/auth";
@@ -29,6 +30,7 @@ export function NewReport() {
   const { user } = useAuth();
   const catalog = useTestCatalog();
   const saveReport = useSaveReport();
+  const generatePdf = useGenerateReportPdf();
   const upsertPatient = useUpsertPatientUhid();
   const saveCatalogPrice = useSaveCatalogPrice();
   const { data: sub } = useSubscription();
@@ -219,7 +221,11 @@ const totalPrice = selected.reduce((s, n) => s + effectivePrice(n), 0);
         });
       }
 
-      nav("/app/reports");
+      // Kick off PDF generation in the background and flag it so the report
+      // list opens the actions sheet showing a "Generating PDF…" state.
+      sessionStorage.setItem("pdfGenerating", id);
+      generatePdf.mutate({ id, testType: selected.join(", "), patientName: patient.name, phone } as never);
+      nav("/app/reports", { state: { openReportId: id } });
     } finally {
       setSaving(false);
     }
@@ -462,9 +468,13 @@ const totalPrice = selected.reduce((s, n) => s + effectivePrice(n), 0);
 /** Uncontrolled-style price input: user types freely, value commits to parent on blur/Enter. */
 function PriceInput({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
   const [draft, setDraft] = useState(value > 0 ? String(value) : "");
+  const [focused, setFocused] = useState(false);
 
-  // Sync if parent resets (e.g. catalog loaded after mount)
-  useState(() => { if (value > 0 && draft === "") setDraft(String(value)); });
+  // Sync from parent when the value arrives/changes (e.g. catalog loads after
+  // mount), but never clobber what the user is actively typing.
+  useEffect(() => {
+    if (!focused) setDraft(value > 0 ? String(value) : "");
+  }, [value, focused]);
 
   function commit() {
     const v = parseFloat(draft.replace(/[^\d.]/g, ""));
@@ -479,8 +489,9 @@ function PriceInput({ value, onCommit }: { value: number; onCommit: (v: number) 
       className="w-16 h-7 px-1.5 rounded border border-[var(--color-border)] bg-white text-[12px] num text-right focus:outline-none focus:border-[var(--color-primary-400)] focus:ring-1 focus:ring-[var(--color-primary-200)]"
       value={draft}
       placeholder="0"
+      onFocus={() => setFocused(true)}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
+      onBlur={() => { setFocused(false); commit(); }}
       onKeyDown={(e) => { if (e.key === "Enter") { commit(); (e.target as HTMLInputElement).blur(); } }}
     />
   );

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Search, FilePlus2 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Spinner, EmptyState } from "../components/ui";
@@ -12,6 +12,20 @@ export function ReportHistory() {
   const reports = useRecentReports(200);
   const [active, setActive] = useState<LabReport | null>(null);
   const [q, setQ] = useState("");
+  const location = useLocation();
+  const nav = useNavigate();
+
+  // After saving a new report, auto-open its actions sheet (shows PDF progress).
+  // Consume the nav state once so closing the sheet doesn't re-open it.
+  const openReportId = (location.state as { openReportId?: string } | null)?.openReportId;
+  useEffect(() => {
+    if (!openReportId) return;
+    const found = reports.data?.find((r) => r.id === openReportId);
+    if (found) {
+      setActive(found);
+      nav(location.pathname, { replace: true, state: null });
+    }
+  }, [openReportId, reports.data, location.pathname, nav]);
 
   const rows = useMemo(() => {
     const ql = q.trim().toLowerCase();

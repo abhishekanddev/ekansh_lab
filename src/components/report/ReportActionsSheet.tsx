@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, Download, Printer, Send, Link2, Pencil, Receipt, X, FileText, Trash2, Loader2, RefreshCw } from "lucide-react";
 import { useHospitalId } from "../../lib/auth";
@@ -26,6 +26,19 @@ export function ReportActionsSheet({ report: initialReport, onClose }: { report:
 
   const verifyUrl = `${window.location.origin}/verify?r=${hid}/${report.id}`;
   const pdfUrl = report.pdfUrl as string | undefined;
+
+  // Was PDF generation kicked off for this report when it was saved? If so,
+  // show a "Generating…" state until the live pdfUrl arrives.
+  const [autoGenerating, setAutoGenerating] = useState(
+    () => sessionStorage.getItem("pdfGenerating") === initialReport.id,
+  );
+  useEffect(() => {
+    if (pdfUrl && autoGenerating) {
+      sessionStorage.removeItem("pdfGenerating");
+      setAutoGenerating(false);
+    }
+  }, [pdfUrl, autoGenerating]);
+  const pending = generatePdf.isPending || (autoGenerating && !pdfUrl);
   const billed = !!report.invoiceId;
 
   // Seed the invoice from the report — one line item per test, priced from the
@@ -114,11 +127,11 @@ export function ReportActionsSheet({ report: initialReport, onClose }: { report:
             </>
           ) : (
             <Action
-              icon={generatePdf.isPending ? <Loader2 size={20} className="animate-spin" /> : <RefreshCw size={20} />}
+              icon={pending ? <Loader2 size={20} className="animate-spin" /> : <RefreshCw size={20} />}
               color="#1f6feb"
-              title={generatePdf.isPending ? "Generating PDF…" : "Generate PDF"}
-              subtitle={generatePdf.isError ? "Failed — tap to retry" : "Build the PDF for this report"}
-              onClick={generatePdf.isPending ? () => {} : () => generatePdf.mutate(report)}
+              title={pending ? "Generating PDF…" : "Generate PDF"}
+              subtitle={generatePdf.isError ? "Failed — tap to retry" : pending ? "Please wait, this takes a few seconds" : "Build the PDF for this report"}
+              onClick={pending ? () => {} : () => generatePdf.mutate(report)}
             />
           )}
           <Action icon={<Send size={20} />} color="#25D366" title="Send via WhatsApp" subtitle="Share the report link with the patient" onClick={whatsapp} />

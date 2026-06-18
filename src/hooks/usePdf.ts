@@ -33,8 +33,9 @@ export function useGenerateReportPdf() {
 
       return result.data.pdfUrl;
     },
-    onSuccess: () => {
+    onSuccess: (_pdfUrl, report) => {
       qc.invalidateQueries({ queryKey: ["reports", hid] });
+      qc.invalidateQueries({ queryKey: ["report", hid, report.id] });
     },
   });
 }
