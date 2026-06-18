@@ -4,8 +4,9 @@ import { FileText, Users, IndianRupee, CalendarCheck, FilePlus2, FlaskConical, R
 import { PageHeader } from "../components/PageHeader";
 import { KpiTile, Spinner, EmptyState } from "../components/ui";
 import { ReportActionsSheet } from "../components/report/ReportActionsSheet";
+import { ReportRow } from "../components/report/ReportRow";
 import { useRecentReports, usePatients } from "../hooks/useLabData";
-import { fmtDateTime, fmtMoney, isToday } from "../lib/format";
+import { fmtMoney, isToday } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import type { LabReport } from "../lib/types";
 
@@ -65,16 +66,12 @@ export function Dashboard() {
                   <th className="font-semibold px-4 py-2.5">Test</th>
                   <th className="font-semibold px-4 py-2.5">Date</th>
                   <th className="font-semibold px-4 py-2.5 text-right">Amount</th>
+                  <th className="w-[72px]" />
                 </tr>
               </thead>
               <tbody>
                 {list.slice(0, 8).map((r) => (
-                  <tr key={r.id} onClick={() => setActive(r)} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-bg)] cursor-pointer">
-                    <td className="px-4 py-3 font-medium">{r.patientName || "—"}</td>
-                    <td className="px-4 py-3 text-[var(--color-muted)]">{r.testType}</td>
-                    <td className="px-4 py-3 text-[var(--color-muted)] num">{fmtDateTime(r.createdAt)}</td>
-                    <td className="px-4 py-3 text-right num">{fmtMoney(r.price)}</td>
-                  </tr>
+                  <ReportRow key={r.id} r={r} onClick={() => setActive(r)} />
                 ))}
               </tbody>
             </table>

@@ -68,6 +68,7 @@ export function NewReport() {
   /** Per-test free-text Observation / Notes (mirrors mobile observation field). */
   const [observationMap, setObservationMap] = useState<Record<string, string>>({});
   const [activeTest, setActiveTest] = useState<string>("");
+  const [priceOverrides, setPriceOverrides] = useState<Record<string, number>>({});
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const [saving, setSaving] = useState(false);
@@ -133,7 +134,11 @@ export function NewReport() {
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   }
 
-  const totalPrice = selected.reduce((s, n) => s + (priceByName.get(n) ?? 0), 0);
+  function effectivePrice(name: string) {
+    return priceOverrides[name] ?? priceByName.get(name) ?? 0;
+  }
+
+const totalPrice = selected.reduce((s, n) => s + effectivePrice(n), 0);
 
   async function onSave() {
     if (quotaBlocked) return;
@@ -181,6 +186,7 @@ export function NewReport() {
         verificationCode,
         formData,
         price: totalPrice,
+        testPrices: Object.fromEntries(selected.map((n) => [n, effectivePrice(n)])),
         createdAt: serverTimestamp(),
       };
 
@@ -313,17 +319,29 @@ export function NewReport() {
             <div className="max-h-[420px] overflow-y-auto -mx-1 px-1 space-y-1">
               {filtered.map((t) => {
                 const on = selected.includes(t.testName);
+                const price = effectivePrice(t.testName);
                 return (
-                  <button key={t.testName} onClick={() => toggleTest(t.testName)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md border text-left text-sm ${
+                  <div key={t.testName}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md border text-sm ${
                       on ? "border-[var(--color-primary-300)] bg-[var(--color-primary-50)]" : "border-[var(--color-border)] hover:bg-[var(--color-bg)]"
                     }`}>
-                    <span className={`w-4 h-4 grid place-items-center rounded border ${on ? "bg-[var(--color-primary-600)] border-[var(--color-primary-600)] text-white" : "border-[var(--color-border)]"}`}>
-                      {on && <Check size={11} />}
-                    </span>
-                    <span className="flex-1">{t.testName}</span>
-                    <span className="text-[11px] text-[var(--color-faint)]">{t.category}</span>
-                  </button>
+                    {/* Checkbox + name — clicking this area toggles the test */}
+                    <button type="button" onClick={() => toggleTest(t.testName)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                      <span className={`w-4 h-4 shrink-0 grid place-items-center rounded border ${on ? "bg-[var(--color-primary-600)] border-[var(--color-primary-600)] text-white" : "border-[var(--color-border)]"}`}>
+                        {on && <Check size={11} />}
+                      </span>
+                      <span className="flex-1 truncate font-medium">{t.testName}</span>
+                      <span className="text-[11px] text-[var(--color-faint)] shrink-0 hidden sm:block">{t.category}</span>
+                    </button>
+                    {/* Price input — always visible, click without toggling the test */}
+                    <div className="shrink-0 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[12px] text-[var(--color-muted)]">₹</span>
+                      <PriceInput
+                        value={price}
+                        onCommit={(v) => setPriceOverrides((p) => ({ ...p, [t.testName]: v }))}
+                      />
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -434,6 +452,33 @@ export function NewReport() {
         )}
       </div>
     </div>
+  );
+}
+
+/** Uncontrolled-style price input: user types freely, value commits to parent on blur/Enter. */
+function PriceInput({ value, onCommit }: { value: number; onCommit: (v: number) => void }) {
+  const [draft, setDraft] = useState(value > 0 ? String(value) : "");
+
+  // Sync if parent resets (e.g. catalog loaded after mount)
+  useState(() => { if (value > 0 && draft === "") setDraft(String(value)); });
+
+  function commit() {
+    const v = parseFloat(draft.replace(/[^\d.]/g, ""));
+    onCommit(isNaN(v) ? 0 : v);
+    if (isNaN(v)) setDraft("");
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      className="w-16 h-7 px-1.5 rounded border border-[var(--color-border)] bg-white text-[12px] num text-right focus:outline-none focus:border-[var(--color-primary-400)] focus:ring-1 focus:ring-[var(--color-primary-200)]"
+      value={draft}
+      placeholder="0"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") { commit(); (e.target as HTMLInputElement).blur(); } }}
+    />
   );
 }
 

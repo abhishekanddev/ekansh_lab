@@ -4,8 +4,8 @@ import { Search, FilePlus2 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Spinner, EmptyState } from "../components/ui";
 import { ReportActionsSheet } from "../components/report/ReportActionsSheet";
+import { ReportRow } from "../components/report/ReportRow";
 import { useRecentReports } from "../hooks/useLabData";
-import { fmtDateTime, fmtMoney } from "../lib/format";
 import type { LabReport } from "../lib/types";
 
 export function ReportHistory() {
@@ -49,16 +49,12 @@ export function ReportHistory() {
                 <th className="font-semibold px-4 py-2.5">Test</th>
                 <th className="font-semibold px-4 py-2.5">Date</th>
                 <th className="font-semibold px-4 py-2.5 text-right">Amount</th>
+                <th className="w-[72px]" />
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} onClick={() => setActive(r)} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-bg)] cursor-pointer">
-                  <td className="px-4 py-3 font-medium">{r.patientName || "—"}<div className="text-[11px] text-[var(--color-faint)] num">{r.phone}</div></td>
-                  <td className="px-4 py-3 text-[var(--color-muted)]">{r.testType}</td>
-                  <td className="px-4 py-3 num text-[var(--color-muted)]">{fmtDateTime(r.createdAt)}</td>
-                  <td className="px-4 py-3 num text-right">{fmtMoney(r.price)}</td>
-                </tr>
+                <ReportRow key={r.id} r={r} onClick={() => setActive(r)} />
               ))}
             </tbody>
           </table>

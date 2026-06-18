@@ -2,8 +2,8 @@ import { useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, FilePlus2, FileText, FlaskConical, Users, Receipt,
-  SlidersHorizontal, UsersRound, ScrollText, Search, Bell, Building2,
-  ChevronDown, LogOut, Beaker, Crown, AlertTriangle, Clock, UserCircle,
+  SlidersHorizontal, UsersRound, ScrollText, Search, Bell,
+  LogOut, Beaker, Crown, AlertTriangle, Clock, UserCircle,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
@@ -47,14 +47,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen">
       {/* Sidebar */}
-      <aside className="w-60 shrink-0 bg-white border-r border-[var(--color-border)] flex flex-col sticky top-0 h-screen">
-        <div className="flex items-center gap-2.5 h-[60px] px-4 border-b border-[var(--color-border)]">
+      <aside className="w-60 shrink-0 bg-[#0f172a] flex flex-col sticky top-0 h-screen">
+        <div className="flex items-center gap-2.5 h-[60px] px-4 border-b border-white/10">
           <div className="grid place-items-center w-[30px] h-[30px] rounded-lg bg-[var(--color-primary-600)] text-white">
             <Beaker size={18} />
           </div>
           <div className="leading-tight">
-            <div className="font-bold text-[15px]">Ekansh Lab</div>
-            <div className="text-[11px] text-[var(--color-muted)] truncate max-w-[150px]">
+            <div className="font-bold text-[15px] text-white">Ekansh Lab</div>
+            <div className="text-[11px] text-slate-400 truncate max-w-[150px]">
               {user?.hospitalName || "Lab Suite"}
             </div>
           </div>
@@ -63,7 +63,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="flex-1 overflow-y-auto p-2">
           {NAV.map((item, i) =>
             "group" in item ? (
-              <div key={i} className="px-3 pt-3.5 pb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-[var(--color-faint)]">
+              <div key={i} className="px-3 pt-3.5 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                 {item.group}
               </div>
             ) : (
@@ -72,22 +72,22 @@ export function AppShell({ children }: { children: ReactNode }) {
                 to={item.to}
                 end={item.to === "/app/reports"}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-md mb-0.5 font-medium text-sm ${
+                  `flex items-center gap-3 px-3 py-2 rounded-md mb-0.5 font-medium text-[13.5px] ${
                     isActive
-                      ? "bg-[var(--color-primary-50)] text-[var(--color-primary-700)]"
-                      : "text-[var(--color-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]"
+                      ? "bg-[var(--color-primary-600)] text-white"
+                      : "text-slate-400 hover:bg-white/10 hover:text-white"
                   }`
                 }
               >
-                <item.icon size={19} />
+                <item.icon size={17} />
                 <span className="flex-1">{item.label}</span>
               </NavLink>
             )
           )}
         </nav>
 
-        <div className="border-t border-[var(--color-border)] px-3 py-2.5 flex items-center gap-2 text-[12px] text-[var(--color-muted)]">
-          <span className="w-2 h-2 rounded-full bg-[var(--color-success)] ring-4 ring-green-100" />
+        <div className="border-t border-white/10 px-3 py-2.5 flex items-center gap-2 text-[12px] text-slate-500">
+          <span className="w-2 h-2 rounded-full bg-[var(--color-success)] ring-4 ring-green-900/40" />
           Connected · Live
         </div>
       </aside>
@@ -104,27 +104,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex-1" />
           <SubscriptionBadge sub={sub} />
-          <button className="flex items-center gap-2 px-2.5 h-9 border border-[var(--color-border)] rounded-md text-sm hover:bg-[var(--color-bg)]">
-            <Building2 size={16} className="text-[var(--color-primary-600)]" />
-            <span className="hidden lg:block leading-tight text-left">
-              <span className="block font-semibold text-[12.5px]">{user?.hospitalName || "My Lab"}</span>
-              <span className="block text-[11px] text-[var(--color-muted)]">Lab</span>
-            </span>
-            <ChevronDown size={14} className="text-[var(--color-faint)]" />
-          </button>
           <button className="relative w-9 h-9 grid place-items-center border border-[var(--color-border)] rounded-md text-[var(--color-muted)] hover:bg-[var(--color-bg)]">
             <Bell size={18} />
           </button>
-          <div className="flex items-center gap-2 pl-1">
-            <Link to="/app/profile" title="My account" className="flex items-center gap-2 hover:opacity-80">
-              <span className="w-8 h-8 grid place-items-center rounded-full bg-[var(--color-primary-600)] text-white text-xs font-semibold">{initials}</span>
+          <div className="flex items-center gap-2 pl-1 border-l border-[var(--color-border)] ml-1">
+            <Link to="/app/profile" title="My account" className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-[var(--color-bg)]">
+              <span className="w-8 h-8 grid place-items-center rounded-full bg-[var(--color-primary-600)] text-white text-xs font-semibold shrink-0">{initials}</span>
               <span className="hidden md:block leading-tight">
                 <span className="block font-semibold text-[13px]">{user?.name}</span>
                 <span className="block text-[11px] text-[var(--color-muted)]">{roleLabel(user?.role)}</span>
               </span>
             </Link>
-            <button onClick={() => setConfirmLogout(true)} title="Sign out" className="ml-1 w-9 h-9 grid place-items-center border border-[var(--color-border)] rounded-md text-[var(--color-muted)] hover:bg-[var(--color-bg)]">
-              <LogOut size={16} />
+            <button onClick={() => setConfirmLogout(true)} title="Sign out" className="w-8 h-8 grid place-items-center rounded-md text-[var(--color-faint)] hover:text-[var(--color-danger)] hover:bg-red-50">
+              <LogOut size={15} />
             </button>
           </div>
         </header>

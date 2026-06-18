@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, Download, Printer, Send, Link2, Pencil, Receipt, X, FileText, Trash2, Loader2 } from "lucide-react";
+import { Eye, Download, Printer, Send, Link2, Pencil, Receipt, X, FileText, Trash2, Loader2, RefreshCw } from "lucide-react";
 import { useHospitalId } from "../../lib/auth";
 import { useDeleteReport, useTestCatalog } from "../../hooks/useLabData";
+import { useGenerateReportPdf } from "../../hooks/usePdf";
 import { CreateInvoiceModal, type InvoiceSeed } from "../../pages/Invoices";
 import type { LabReport } from "../../lib/types";
 
@@ -17,6 +18,7 @@ export function ReportActionsSheet({ report, onClose }: { report: LabReport; onC
   const catalog = useTestCatalog();
   const [deleting, setDeleting] = useState(false);
   const [invoicing, setInvoicing] = useState(false);
+  const generatePdf = useGenerateReportPdf();
 
   const verifyUrl = `${window.location.origin}/verify?r=${hid}/${report.id}`;
   const pdfUrl = report.pdfUrl as string | undefined;
@@ -107,7 +109,13 @@ export function ReportActionsSheet({ report, onClose }: { report: LabReport; onC
               <Action icon={<Printer size={20} />} color="#6D28D9" title="Print report" subtitle="Print or save as PDF" onClick={() => { const w = window.open(pdfUrl, "_blank"); w?.addEventListener("load", () => w.print()); onClose(); }} />
             </>
           ) : (
-            <Action icon={<FileText size={20} />} color="#64748b" title="No PDF yet" subtitle="Open & save the report to generate its PDF" onClick={() => go(`/app/reports/${report.id}/verify`)} />
+            <Action
+              icon={generatePdf.isPending ? <Loader2 size={20} className="animate-spin" /> : <RefreshCw size={20} />}
+              color="#1f6feb"
+              title={generatePdf.isPending ? "Generating PDF…" : "Generate PDF"}
+              subtitle={generatePdf.isError ? "Failed — tap to retry" : "Build the PDF for this report"}
+              onClick={generatePdf.isPending ? () => {} : () => generatePdf.mutate(report)}
+            />
           )}
           <Action icon={<Send size={20} />} color="#25D366" title="Send via WhatsApp" subtitle="Share the report link with the patient" onClick={whatsapp} />
           <Action icon={<Link2 size={20} />} color="#2563EB" title="Copy verification link" subtitle="Patient views the report in a browser" onClick={copyLink} />
