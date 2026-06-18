@@ -91,7 +91,7 @@ export function ResultEntry({
                         {r.isCustom && <span className="ml-1.5 badge bg-[var(--color-primary-50)] text-[var(--color-primary-700)] text-[10px]">custom</span>}
                       </td>
                       <td className="px-3 py-2">
-                        <CellInput r={r} onValue={(v) => setValue(i, v)} onGrid={(gd, summary) => update(i, { gridData: gd, value: summary })} />
+                        <CellInput r={r} valueIdx={i} onValue={(v) => setValue(i, v)} onGrid={(gd, summary) => update(i, { gridData: gd, value: summary })} />
                       </td>
                       <td className="px-3 py-2 text-[var(--color-muted)] text-[13px]">{r.unit}</td>
                       <td className="px-3 py-2">
@@ -241,18 +241,35 @@ function AddParamForm({ sections, onAdd }: { sections: string[]; onAdd: (p: LabP
   );
 }
 
+function focusNextValueInput(currentIdx: number) {
+  const all = Array.from(document.querySelectorAll<HTMLElement>("[data-value-idx]"))
+    .map((el) => ({ el, idx: Number(el.getAttribute("data-value-idx")) }))
+    .filter((x) => x.idx > currentIdx)
+    .sort((a, b) => a.idx - b.idx);
+  all[0]?.el.focus();
+}
+
 function CellInput({
   r,
+  valueIdx,
   onValue,
   onGrid,
 }: {
   r: LabParameter;
+  valueIdx: number;
   onValue: (v: string) => void;
   onGrid: (gd: Record<string, Record<string, unknown>>, summary: string) => void;
 }) {
+  function handleNav(e: React.KeyboardEvent) {
+    if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      focusNextValueInput(valueIdx);
+    }
+  }
+
   if (r.inputType === "dropdown" && r.dropdownOptions?.length) {
     return (
-      <select className="input h-9" value={r.value} onChange={(e) => onValue(e.target.value)}>
+      <select className="input h-9" value={r.value} data-value-idx={valueIdx} onChange={(e) => onValue(e.target.value)} onKeyDown={handleNav}>
         <option value="">—</option>
         {r.dropdownOptions.map((o) => (
           <option key={o}>{o}</option>
@@ -283,7 +300,9 @@ function CellInput({
       className="input h-9"
       inputMode={r.inputType === "numeric" ? "decimal" : "text"}
       value={r.value}
+      data-value-idx={valueIdx}
       onChange={(e) => onValue(e.target.value)}
+      onKeyDown={handleNav}
       placeholder="Enter value"
     />
   );

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, Download, Send, Link2, Pencil, Receipt, X, FileText, Trash2, Loader2 } from "lucide-react";
+import { Eye, Download, Printer, Send, Link2, Pencil, Receipt, X, FileText, Trash2, Loader2 } from "lucide-react";
 import { useHospitalId } from "../../lib/auth";
 import { useDeleteReport, useTestCatalog } from "../../hooks/useLabData";
 import { CreateInvoiceModal, type InvoiceSeed } from "../../pages/Invoices";
@@ -104,6 +104,7 @@ export function ReportActionsSheet({ report, onClose }: { report: LabReport; onC
             <>
               <Action icon={<Eye size={20} />} color="#1f6feb" title="Preview report" subtitle="Open the full PDF" onClick={() => { window.open(pdfUrl, "_blank"); onClose(); }} />
               <Action icon={<Download size={20} />} color="#00535B" title="Download PDF" subtitle="Save to your device" onClick={() => { window.open(pdfUrl, "_blank"); onClose(); }} />
+              <Action icon={<Printer size={20} />} color="#6D28D9" title="Print report" subtitle="Print or save as PDF" onClick={() => { const w = window.open(pdfUrl, "_blank"); w?.addEventListener("load", () => w.print()); onClose(); }} />
             </>
           ) : (
             <Action icon={<FileText size={20} />} color="#64748b" title="No PDF yet" subtitle="Open & save the report to generate its PDF" onClick={() => go(`/app/reports/${report.id}/verify`)} />
