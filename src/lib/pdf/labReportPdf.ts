@@ -494,8 +494,8 @@ function footer(config: HospitalConfig, assets: Assets, currentPage: number, pag
   stack.push({ text: footer3, color: MID_GREY, fontSize: 6, alignment: "center", margin: [0, 1, 0, 0] });
   stack.push({
     columns: [
-      { text: name, color: MID_GREY, fontSize: 6, width: "*" },
-      { text: `Page ${currentPage} of ${pageCount}`, color: MID_GREY, fontSize: 6.5, alignment: "right", width: "auto" },
+      { text: name, color: MID_GREY, fontSize: 8, width: "*" },
+      { text: `Page ${currentPage} of ${pageCount}`, color: MID_GREY, fontSize: 8, alignment: "right", width: "auto" },
     ],
     margin: [0, 2, 0, 0],
   });
