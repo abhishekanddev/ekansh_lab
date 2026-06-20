@@ -1,6 +1,8 @@
 import {
   collection,
   doc,
+  addDoc,
+  serverTimestamp,
   type CollectionReference,
   type DocumentReference,
 } from "firebase/firestore";
@@ -35,6 +37,28 @@ export function hospitalCol(hid: string | null | undefined, name: string): Colle
 
 export function hospitalDoc(hid: string | null | undefined, name: string, id: string): DocumentReference {
   return doc(requireDb(), "hospitals", requireHid(hid), name, id);
+}
+
+/** Fields recorded for a single audit-trail entry. */
+export interface ActivityEntry {
+  action: string;
+  target_name?: string;
+  performed_by?: string;
+  performed_by_uid?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Append an entry to hospitals/{hid}/lab_activity_logs. Mirrors the Flutter
+ * app's audit trail so the web client's actions (report create/delete, price
+ * changes) show up in the shared Activity Log. Best-effort: logging failures
+ * must never block the underlying action, so callers can ignore rejections.
+ */
+export async function logActivity(hid: string | null | undefined, entry: ActivityEntry): Promise<void> {
+  await addDoc(hospitalCol(hid, COL.activity), {
+    ...entry,
+    timestamp: serverTimestamp(),
+  });
 }
 
 export const COL = {

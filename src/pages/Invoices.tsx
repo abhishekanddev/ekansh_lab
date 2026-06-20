@@ -3,6 +3,7 @@ import { Plus, X, Trash2, Receipt, Download } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Spinner, EmptyState } from "../components/ui";
 import { useInvoices, useHospitalConfig } from "../hooks/useLabData";
+import { useCanWrite } from "../hooks/useSubscription";
 import { useCreateInvoice, type CreateInvoiceInput } from "../hooks/useInvoices";
 import { downloadInvoicePdf } from "../lib/pdf/invoicePdf";
 import { fmtDate, fmtMoney } from "../lib/format";
@@ -11,6 +12,7 @@ import type { InvoiceLineItem, InvoiceModel } from "../lib/types";
 export function Invoices() {
   const invoices = useInvoices();
   const config = useHospitalConfig();
+  const { canWrite, reason } = useCanWrite();
   const [open, setOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -29,14 +31,16 @@ export function Invoices() {
         breadcrumb="Home / Billing"
         title="Billing"
         description="Invoices with GST and auto-numbered receipts."
-        actions={<button className="btn btn-primary" onClick={() => setOpen(true)}><Plus size={16} /> New Invoice</button>}
+        actions={canWrite
+          ? <button className="btn btn-primary" onClick={() => setOpen(true)}><Plus size={16} /> New Invoice</button>
+          : <button className="btn btn-primary opacity-50 cursor-not-allowed" disabled title={reason ?? undefined}><Plus size={16} /> New Invoice</button>}
       />
 
       <div className="card overflow-hidden">
         {invoices.isLoading ? (
           <Spinner />
         ) : (invoices.data?.length ?? 0) === 0 ? (
-          <div className="p-8"><EmptyState title="No invoices yet" hint="Create your first invoice." action={<button className="btn btn-primary" onClick={() => setOpen(true)}><Plus size={16} /> New Invoice</button>} /></div>
+          <div className="p-8"><EmptyState title="No invoices yet" hint="Create your first invoice." action={canWrite ? <button className="btn btn-primary" onClick={() => setOpen(true)}><Plus size={16} /> New Invoice</button> : undefined} /></div>
         ) : (
           <table className="w-full text-sm">
             <thead>

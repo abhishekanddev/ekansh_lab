@@ -168,7 +168,9 @@ function patientKv(key: string, value: string, bold = false): Content {
 function patientInfoGrid(report: LabReport, assets: Assets, verificationCode?: string): Content {
   const fd = report.formData ?? {};
   const rec = report as unknown as Record<string, unknown>;
-  const name = report.patientName ?? "";
+  const title = (fd.title as string) ?? "";
+  const baseName = report.patientName ?? "";
+  const name = title ? `${title} ${baseName}`.trim() : baseName;
   const age = (fd.age as string) ?? "";
   const gender = (fd.gender as string) ?? "";
   const phone = report.phone ?? (fd.phone as string) ?? "";

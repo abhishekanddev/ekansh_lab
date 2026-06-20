@@ -6,12 +6,14 @@ import { KpiTile, Spinner, EmptyState } from "../components/ui";
 import { ReportActionsSheet } from "../components/report/ReportActionsSheet";
 import { ReportRow } from "../components/report/ReportRow";
 import { useRecentReports, usePatients } from "../hooks/useLabData";
+import { useCanWrite } from "../hooks/useSubscription";
 import { fmtMoney, isToday } from "../lib/format";
 import { useAuth } from "../lib/auth";
 import type { LabReport } from "../lib/types";
 
 export function Dashboard() {
   const { user } = useAuth();
+  const { canWrite, reason } = useCanWrite();
   const reports = useRecentReports(50);
   const patients = usePatients();
   const [active, setActive] = useState<LabReport | null>(null);
@@ -32,9 +34,15 @@ export function Dashboard() {
         title={`${greeting}, ${user?.name?.split(" ")[0] || "there"}`}
         description="Your lab at a glance."
         actions={
-          <Link to="/app/reports/new" className="btn btn-primary">
-            <FilePlus2 size={16} /> New Report
-          </Link>
+          canWrite ? (
+            <Link to="/app/reports/new" className="btn btn-primary">
+              <FilePlus2 size={16} /> New Report
+            </Link>
+          ) : (
+            <button className="btn btn-primary opacity-50 cursor-not-allowed" disabled title={reason ?? undefined}>
+              <FilePlus2 size={16} /> New Report
+            </button>
+          )
         }
       />
 
@@ -82,7 +90,7 @@ export function Dashboard() {
         <div className="card p-4">
           <h2 className="font-semibold text-[15px] mb-3">Quick actions</h2>
           <div className="grid gap-2">
-            <QuickLink to="/app/reports/new" icon={<FilePlus2 size={17} />} label="New report" />
+            <QuickLink to="/app/reports/new" icon={<FilePlus2 size={17} />} label="New report" disabled={!canWrite} title={reason ?? undefined} />
             <QuickLink to="/app/catalog" icon={<FlaskConical size={17} />} label="Test catalog" />
             <QuickLink to="/app/patients" icon={<Users size={17} />} label="Patients" />
             <QuickLink to="/app/invoices" icon={<Receipt size={17} />} label="Billing" />
@@ -95,7 +103,18 @@ export function Dashboard() {
   );
 }
 
-function QuickLink({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+function QuickLink({ to, icon, label, disabled, title }: { to: string; icon: React.ReactNode; label: string; disabled?: boolean; title?: string }) {
+  if (disabled) {
+    return (
+      <span
+        title={title}
+        className="flex items-center gap-3 px-3 py-2.5 rounded-md border border-[var(--color-border)] text-sm font-medium opacity-50 cursor-not-allowed"
+      >
+        <span className="text-[var(--color-primary-600)]">{icon}</span>
+        {label}
+      </span>
+    );
+  }
   return (
     <Link
       to={to}

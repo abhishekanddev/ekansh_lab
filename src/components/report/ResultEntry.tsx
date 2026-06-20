@@ -91,7 +91,13 @@ export function ResultEntry({
                         {r.isCustom && <span className="ml-1.5 badge bg-[var(--color-primary-50)] text-[var(--color-primary-700)] text-[10px]">custom</span>}
                       </td>
                       <td className="px-3 py-2">
-                        <CellInput r={r} valueIdx={i} onValue={(v) => setValue(i, v)} onGrid={(gd, summary) => update(i, { gridData: gd, value: summary })} />
+                        <CellInput
+                          r={r}
+                          valueIdx={i}
+                          onValue={(v) => setValue(i, v)}
+                          onGrid={(gd, summary) => update(i, { gridData: gd, value: summary })}
+                          widalMethod={results.find((p) => p.parameter === "Method")?.value}
+                        />
                       </td>
                       <td className="px-3 py-2 text-[var(--color-muted)] text-[13px]">{r.unit}</td>
                       <td className="px-3 py-2">
@@ -254,11 +260,13 @@ function CellInput({
   valueIdx,
   onValue,
   onGrid,
+  widalMethod,
 }: {
   r: LabParameter;
   valueIdx: number;
   onValue: (v: string) => void;
   onGrid: (gd: Record<string, Record<string, unknown>>, summary: string) => void;
+  widalMethod?: string;
 }) {
   function handleNav(e: React.KeyboardEvent) {
     if (e.key === "Enter" || e.key === "Tab") {
@@ -278,7 +286,7 @@ function CellInput({
     );
   }
   if (r.inputType === "grid" && r.gridRows && r.gridColumns) {
-    return <GridInput r={r} onGrid={onGrid} />;
+    return <GridInput r={r} onGrid={onGrid} widalMethod={widalMethod} />;
   }
   if (r.inputType === "sensitivityGrid" && r.gridRows) {
     return <SensitivityGridInput r={r} onGrid={onGrid} />;
@@ -322,44 +330,125 @@ function FxBadge({ testType, param }: { testType?: string | null; param: string 
   );
 }
 
-function GridInput({ r, onGrid }: { r: LabParameter; onGrid: (gd: Record<string, Record<string, unknown>>, s: string) => void }) {
+function GridInput({
+  r,
+  onGrid,
+  widalMethod,
+}: {
+  r: LabParameter;
+  onGrid: (gd: Record<string, Record<string, unknown>>, s: string) => void;
+  widalMethod?: string;
+}) {
   const rows = r.gridRows!;
   const cols = r.gridColumns!;
   const gd = (r.gridData ?? {}) as Record<string, Record<string, unknown>>;
 
-  function toggle(row: string, col: string) {
+  function toggleTube(row: string, col: string) {
     const next: Record<string, Record<string, unknown>> = { ...gd, [row]: { ...(gd[row] ?? {}) } };
-    // single endpoint per row: clear others, set this
     const cur = next[row][col] === true;
     for (const c of cols) next[row][c] = false;
     next[row][col] = !cur;
-    onGrid(next, gridSummary(next, cols));
+    onGrid(next, buildSummary(next));
   }
 
+  function setSlide(row: string, val: string) {
+    const next: Record<string, Record<string, unknown>> = { ...gd, [row]: { ...(gd[row] ?? {}), result: val === "Positive" } };
+    onGrid(next, buildSummary(next));
+  }
+
+  function buildSummary(data: Record<string, Record<string, unknown>>) {
+    const isSlide = widalMethod === "Slide Method";
+    const isBoth = widalMethod === "Both Methods";
+    const parts: string[] = [];
+    for (const row of rows) {
+      const cells = data[row] ?? {};
+      if (isSlide) {
+        parts.push(`${row}: ${cells.result === true ? "Positive" : cells.result === false ? "Negative" : ""}`);
+      } else if (isBoth) {
+        const slideVal = cells.result === true ? "Positive" : cells.result === false ? "Negative" : "";
+        let tubeEndpoint: string | undefined;
+        for (const col of [...cols].reverse()) { if (cells[col] === true) { tubeEndpoint = col; break; } }
+        parts.push(`${row}: Slide=${slideVal || "—"} Tube=${tubeEndpoint ?? "Neg"}`);
+      } else {
+        let endpoint: string | undefined;
+        for (const col of [...cols].reverse()) { if (cells[col] === true) { endpoint = col; break; } }
+        parts.push(`${row}: ${endpoint ?? "Negative"}`);
+      }
+    }
+    return parts.join(", ");
+  }
+
+  const showSlide = widalMethod === "Slide Method" || widalMethod === "Both Methods";
+  const showTube = !widalMethod || widalMethod === "Tube Method" || widalMethod === "Both Methods";
+
   return (
-    <div className="overflow-x-auto">
-      <table className="text-[11px] border border-[var(--color-border)] rounded">
-        <thead>
-          <tr>
-            <th className="px-2 py-1 text-left text-[var(--color-faint)]"></th>
-            {cols.map((c) => (
-              <th key={c} className="px-2 py-1 text-[var(--color-muted)] num">{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row} className="border-t border-[var(--color-border)]">
-              <td className="px-2 py-1 font-medium whitespace-nowrap">{row}</td>
-              {cols.map((c) => (
-                <td key={c} className="px-2 py-1 text-center">
-                  <input type="checkbox" checked={gd[row]?.[c] === true} onChange={() => toggle(row, c)} />
-                </td>
+    <div className="overflow-x-auto space-y-2">
+      {showSlide && (
+        <div>
+          {widalMethod === "Both Methods" && (
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-faint)] mb-1">Slide Method</div>
+          )}
+          <table className="text-[11px] border border-[var(--color-border)] rounded">
+            <thead>
+              <tr>
+                <th className="px-2 py-1 text-left text-[var(--color-faint)]"></th>
+                <th className="px-2 py-1 text-[var(--color-muted)]">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const val = gd[row]?.result;
+                const selected = val === true ? "Positive" : val === false ? "Negative" : "";
+                return (
+                  <tr key={row} className="border-t border-[var(--color-border)]">
+                    <td className="px-2 py-1 font-medium whitespace-nowrap">{row}</td>
+                    <td className="px-2 py-1">
+                      <select
+                        className="input h-7 text-[11px]"
+                        value={selected}
+                        onChange={(e) => setSlide(row, e.target.value)}
+                      >
+                        <option value="">—</option>
+                        <option value="Positive">Positive</option>
+                        <option value="Negative">Negative</option>
+                      </select>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {showTube && (
+        <div>
+          {widalMethod === "Both Methods" && (
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-faint)] mb-1">Tube Method</div>
+          )}
+          <table className="text-[11px] border border-[var(--color-border)] rounded">
+            <thead>
+              <tr>
+                <th className="px-2 py-1 text-left text-[var(--color-faint)]"></th>
+                {cols.map((c) => (
+                  <th key={c} className="px-2 py-1 text-[var(--color-muted)] num">{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row} className="border-t border-[var(--color-border)]">
+                  <td className="px-2 py-1 font-medium whitespace-nowrap">{row}</td>
+                  {cols.map((c) => (
+                    <td key={c} className="px-2 py-1 text-center">
+                      <input type="checkbox" checked={gd[row]?.[c] === true} onChange={() => toggleTube(row, c)} />
+                    </td>
+                  ))}
+                </tr>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

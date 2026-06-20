@@ -3,6 +3,7 @@ import {
   getDocs,
   getDoc,
   setDoc,
+  updateDoc,
   deleteDoc,
   doc as fbDoc,
   query,
@@ -12,9 +13,11 @@ import {
   serverTimestamp,
   runTransaction,
 } from "firebase/firestore";
-import { useHospitalId } from "../lib/auth";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../lib/firebase";
+import { useHospitalId, useAuth } from "../lib/auth";
 import { collection } from "firebase/firestore";
-import { hospitalCol, hospitalDoc, hospitalRef, COL, requireDb } from "../lib/db";
+import { hospitalCol, hospitalDoc, hospitalRef, COL, requireDb, logActivity } from "../lib/db";
 import { normalizePhone } from "../lib/reportBuilder";
 import type {
   LabReport,
@@ -81,13 +84,26 @@ export function useReport(id?: string) {
 
 export function useSaveReport() {
   const hid = useHospitalId();
+  const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (report: Partial<LabReport> & { id: string }) => {
       const { id, ...data } = report;
       const payload: Record<string, unknown> = { ...data, id };
-      if (!("createdAt" in data)) payload.createdAt = serverTimestamp();
+      // A brand-new report has no createdAt yet; edits already carry one.
+      const isNew = !("createdAt" in data);
+      if (isNew) payload.createdAt = serverTimestamp();
       await setDoc(hospitalDoc(hid!, COL.reports, id), payload, { merge: true });
+      if (isNew) {
+        try {
+          await logActivity(hid, {
+            action: "report_created",
+            target_name: report.patientName || report.testType || id,
+            performed_by: user?.name,
+            performed_by_uid: user?.uid,
+          });
+        } catch { /* audit logging is best-effort */ }
+      }
       return id;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reports", hid] }),
@@ -96,9 +112,29 @@ export function useSaveReport() {
 
 export function useDeleteReport() {
   const hid = useHospitalId();
+  const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => deleteDoc(hospitalDoc(hid!, COL.reports, id)),
+    mutationFn: async (id: string) => {
+      // Capture the patient name before deletion so the audit entry is meaningful.
+      let targetName = id;
+      try {
+        const snap = await getDoc(hospitalDoc(hid!, COL.reports, id));
+        if (snap.exists()) {
+          const d = snap.data() as Partial<LabReport>;
+          targetName = d.patientName || d.testType || id;
+        }
+      } catch { /* fall back to id */ }
+      await deleteDoc(hospitalDoc(hid!, COL.reports, id));
+      try {
+        await logActivity(hid, {
+          action: "report_deleted",
+          target_name: targetName,
+          performed_by: user?.name,
+          performed_by_uid: user?.uid,
+        });
+      } catch { /* audit logging is best-effort */ }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reports", hid] }),
   });
 }
@@ -121,6 +157,7 @@ export function useTestCatalog() {
  */
 export function useSaveCatalogPrice() {
   const hid = useHospitalId();
+  const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (item: { testName: string; category: string; price: number; isActive: boolean }) => {
@@ -136,6 +173,15 @@ export function useSaveCatalogPrice() {
           isActive: item.isActive,
         });
       }
+      try {
+        await logActivity(hid, {
+          action: "price_updated",
+          target_name: item.testName,
+          performed_by: user?.name,
+          performed_by_uid: user?.uid,
+          metadata: { price: item.price },
+        });
+      } catch { /* audit logging is best-effort */ }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["catalog", hid] }),
   });
@@ -214,7 +260,7 @@ export function useUpsertPatientUhid() {
   const hid = useHospitalId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (p: { phone: string; name: string; age: string; gender: string }) => {
+    mutationFn: async (p: { phone: string; name: string; age: string; gender: string; title?: string }) => {
       const phone = normalizePhone(p.phone);
       if (phone.length < 10) return null;
       const dbi = requireDb();
@@ -236,7 +282,7 @@ export function useUpsertPatientUhid() {
           const existing = (data.uhid as string | undefined) ?? "";
           const uhid = existing || (await genUhid());
           tx.update(patientRef, {
-            name: p.name, age: p.age, gender: p.gender,
+            name: p.name, age: p.age, gender: p.gender, title: p.title ?? "",
             lastVisit: serverTimestamp(),
             totalVisits: ((data.totalVisits as number) ?? 1) + 1,
             ...(existing ? {} : { uhid }),
@@ -245,7 +291,7 @@ export function useUpsertPatientUhid() {
         }
         const uhid = await genUhid();
         tx.set(patientRef, {
-          id: phone, hospitalId: hid, phone, name: p.name, age: p.age, gender: p.gender,
+          id: phone, hospitalId: hid, phone, name: p.name, age: p.age, gender: p.gender, title: p.title ?? "",
           lastVisit: serverTimestamp(), totalVisits: 1, uhid, registrationDate: serverTimestamp(),
         });
         return uhid;
@@ -307,6 +353,7 @@ export interface StaffMember {
   email?: string;
   role?: string;
   phone?: string;
+  is_active?: boolean;
 }
 
 export function useStaff() {
@@ -318,6 +365,34 @@ export function useStaff() {
       const q = query(collection(requireDb(), "users"), where("hospital_id", "==", hid));
       return rows<StaffMember>(await getDocs(q));
     },
+  });
+}
+
+export function useCreateStaffAccount() {
+  const hid = useHospitalId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { name: string; email: string; password: string }) => {
+      if (!functions) throw new Error("Firebase not configured");
+      const fn = httpsCallable<
+        { name: string; email: string; password: string; hospital_id: string },
+        { success: boolean; uid?: string; message?: string }
+      >(functions, "createStaffAccount");
+      const res = await fn({ ...params, hospital_id: hid! });
+      if (!res.data.success) throw new Error(res.data.message ?? "Failed to create staff account");
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff", hid] }),
+  });
+}
+
+export function useToggleStaffStatus() {
+  const hid = useHospitalId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ staffId, newStatus }: { staffId: string; newStatus: boolean }) => {
+      await updateDoc(fbDoc(requireDb(), "users", staffId), { is_active: newStatus });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["staff", hid] }),
   });
 }
 
@@ -351,6 +426,46 @@ export function useSaveMyProfile(uid?: string) {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["profile", uid] }),
   });
+}
+
+/* ── Staff permissions ──────────────────────────────────────────────────── */
+/**
+ * Configurable staff capability flags, stored once per lab at
+ * `hospitals/{hid}/settings/lab_staff_permissions` (snake_case keys, written by
+ * the Flutter owner UI). The lab owner (role === "hospital") always has full
+ * access; these flags only restrict "staff"-role users.
+ */
+export interface StaffPermissions {
+  can_view_analytics?: boolean;
+  can_edit_prices?: boolean;
+  can_delete_reports?: boolean;
+  can_edit_lab_info?: boolean;
+  can_seed_catalog?: boolean;
+}
+
+export function useStaffPermissions() {
+  const hid = useHospitalId();
+  return useQuery({
+    queryKey: ["staffPermissions", hid],
+    enabled: !!hid,
+    queryFn: async () => {
+      const snap = await getDoc(hospitalDoc(hid!, COL.settings, "lab_staff_permissions"));
+      return (snap.exists() ? snap.data() : {}) as StaffPermissions;
+    },
+  });
+}
+
+/**
+ * Whether the current user may delete reports. Mirrors the Flutter
+ * `labCanDeleteReportsProvider`: the lab owner (role === "hospital") always can;
+ * staff need the explicit `can_delete_reports` flag. UI-only — Firestore rules
+ * must enforce the same restriction server-side.
+ */
+export function useCanDeleteReports(): boolean {
+  const { user } = useAuth();
+  const perms = useStaffPermissions();
+  if (user?.role === "hospital") return true;
+  return perms.data?.can_delete_reports === true;
 }
 
 /* ── Activity log ───────────────────────────────────────────────────────── */

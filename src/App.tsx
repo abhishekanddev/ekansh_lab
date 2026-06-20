@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useAuth } from "./lib/auth";
+import { useCanWrite } from "./hooks/useSubscription";
 import { AppShell } from "./app/AppShell";
 import { Landing } from "./pages/Landing";
 import { Login } from "./pages/Login";
@@ -39,6 +40,16 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <AppShell>{children}</AppShell>;
 }
 
+/** Wraps write-only pages (new/edit report). Redirects to the Subscription page
+ *  when the plan is expired or in the read-only grace window. Must sit inside
+ *  RequireAuth (relies on the resolved hospital + subscription). */
+function RequireActiveSub({ children }: { children: ReactNode }) {
+  const { canWrite, loading } = useCanWrite();
+  if (loading) return <>{children}</>;
+  if (!canWrite) return <Navigate to="/app/subscription" replace />;
+  return <>{children}</>;
+}
+
 /** Gate for /app/onboarding — needs a verified user who has no hospital yet. */
 function RequireOnboarding({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -71,8 +82,8 @@ export default function App() {
       {/* App (auth-gated, wrapped in AppShell) */}
       <Route path="/app/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
       <Route path="/app/reports" element={<RequireAuth><ReportHistory /></RequireAuth>} />
-      <Route path="/app/reports/new" element={<RequireAuth><NewReport /></RequireAuth>} />
-      <Route path="/app/reports/:id/verify" element={<RequireAuth><ReportVerify /></RequireAuth>} />
+      <Route path="/app/reports/new" element={<RequireAuth><RequireActiveSub><NewReport /></RequireActiveSub></RequireAuth>} />
+      <Route path="/app/reports/:id/verify" element={<RequireAuth><RequireActiveSub><ReportVerify /></RequireActiveSub></RequireAuth>} />
       <Route path="/app/catalog" element={<RequireAuth><TestCatalog /></RequireAuth>} />
       <Route path="/app/patients" element={<RequireAuth><Patients /></RequireAuth>} />
       <Route path="/app/patients/:id" element={<RequireAuth><PatientDetail /></RequireAuth>} />

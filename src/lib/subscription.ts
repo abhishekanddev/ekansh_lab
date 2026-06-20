@@ -25,6 +25,8 @@ export interface SubscriptionPlan {
   dailyReportLimit: number;
   dailyAiLimit: number;
   deviceLimit: number;
+  /** Max number of additional staff accounts (0 = owner only). */
+  staffLimit: number;
   features: string[];
   recommended?: boolean;
 }
@@ -39,6 +41,7 @@ export const PAID_PLANS: SubscriptionPlan[] = [
     dailyReportLimit: 10,
     dailyAiLimit: 0,
     deviceLimit: 1,
+    staffLimit: 0,
     features: ["10 Reports per day", "Manual entry only", "1 Concurrent user", "Billing & GST"],
   },
   {
@@ -50,6 +53,7 @@ export const PAID_PLANS: SubscriptionPlan[] = [
     dailyReportLimit: 20,
     dailyAiLimit: 3,
     deviceLimit: 1,
+    staffLimit: 0,
     features: ["20 Reports per day", "3 AI Interpretations / day", "1 Concurrent user", "Billing & GST"],
   },
   {
@@ -61,7 +65,8 @@ export const PAID_PLANS: SubscriptionPlan[] = [
     dailyReportLimit: 25,
     dailyAiLimit: 10,
     deviceLimit: 2,
-    features: ["25 Reports per day", "10 AI Interpretations / day", "2 Concurrent users", "Patient Portal", "Billing & GST"],
+    staffLimit: 1,
+    features: ["25 Reports per day", "10 AI Interpretations / day", "2 Concurrent users", "1 Staff account", "Patient Portal", "Billing & GST"],
     recommended: true,
   },
   {
@@ -73,7 +78,8 @@ export const PAID_PLANS: SubscriptionPlan[] = [
     dailyReportLimit: 50,
     dailyAiLimit: 20,
     deviceLimit: 2,
-    features: ["50 Reports per day", "20 AI Interpretations / day", "2 Concurrent users", "Patient Portal", "Billing & GST"],
+    staffLimit: 1,
+    features: ["50 Reports per day", "20 AI Interpretations / day", "2 Concurrent users", "1 Staff account", "Patient Portal", "Billing & GST"],
   },
   {
     tier: "premium",
@@ -84,7 +90,8 @@ export const PAID_PLANS: SubscriptionPlan[] = [
     dailyReportLimit: 999_999,
     dailyAiLimit: 50,
     deviceLimit: 2,
-    features: ["Unlimited Reports", "50 AI Interpretations / day", "Doctor Review", "Patient Portal", "Billing & GST"],
+    staffLimit: 1,
+    features: ["Unlimited Reports", "50 AI Interpretations / day", "1 Staff account", "Doctor Review", "Patient Portal", "Billing & GST"],
   },
 ];
 
@@ -122,10 +129,18 @@ function toDate(v: unknown): Date | null {
   return null;
 }
 
+/** Trial length and post-expiry grace window — must match the backend
+ *  (`functions/index.js`: 5-day trial; portal `gracePeriodDays = 7`). */
+export const TRIAL_DAYS = 5;
+export const GRACE_PERIOD_DAYS = 7;
+
 export interface OrgSubscription {
   tier: SubscriptionTier;
   startDate: Date | null;
   endDate: Date | null;
+  /** Trial window from the hospital doc (`trial_start_date` / `trial_end_date`). */
+  trialStartDate: Date | null;
+  trialEndDate: Date | null;
   reportsCreatedToday: number;
   aiUsedToday: number;
   aiCreditsBalance: number;
@@ -133,13 +148,15 @@ export interface OrgSubscription {
 }
 
 export function buildSubscription(
-  hospitalStatus: unknown,
+  hospital: Record<string, unknown> | null,
   usage: Record<string, unknown> | null,
 ): OrgSubscription {
   return {
-    tier: tierFromFirestore(hospitalStatus),
+    tier: tierFromFirestore(hospital?.subscription_status),
     startDate: toDate(usage?.start_date),
     endDate: toDate(usage?.end_date),
+    trialStartDate: toDate(hospital?.trial_start_date),
+    trialEndDate: toDate(hospital?.trial_end_date),
     reportsCreatedToday: Number(usage?.reports_created_today ?? usage?.photos_used_today ?? 0),
     aiUsedToday: Number(usage?.ai_used_today ?? 0),
     aiCreditsBalance: Number(usage?.ai_credits_balance ?? 0),
@@ -153,14 +170,27 @@ export function planFor(tier: SubscriptionTier): SubscriptionPlan | null {
   return PAID_PLANS.find((p) => p.tier === tier) ?? null;
 }
 
+/** Effective trial end: explicit `trial_end_date`, else `trial_start_date + 5d`. */
+export function trialEnd(sub: OrgSubscription): Date | null {
+  if (sub.tier !== "trial") return null;
+  if (sub.trialEndDate) return sub.trialEndDate;
+  if (sub.trialStartDate) return new Date(sub.trialStartDate.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  return null;
+}
+
 export function daysRemaining(sub: OrgSubscription): number | null {
-  if (!sub.endDate) return null;
-  const ms = sub.endDate.getTime() - Date.now();
+  const end = sub.tier === "trial" ? trialEnd(sub) : sub.endDate;
+  if (!end) return null;
+  const ms = end.getTime() - Date.now();
   return Math.ceil(ms / (24 * 60 * 60 * 1000));
 }
 
 export function isExpired(sub: OrgSubscription): boolean {
   if (sub.tier === "trialExpired") return true;
+  if (sub.tier === "trial") {
+    const end = trialEnd(sub);
+    return end != null && end.getTime() < Date.now();
+  }
   const d = daysRemaining(sub);
   return d != null && d < 0;
 }
@@ -168,6 +198,20 @@ export function isExpired(sub: OrgSubscription): boolean {
 export function isExpiringSoon(sub: OrgSubscription): boolean {
   const d = daysRemaining(sub);
   return d != null && d >= 0 && d <= 7;
+}
+
+/** Whole days since a paid plan lapsed (0 when not yet expired / not paid). */
+export function daysSinceExpiry(sub: OrgSubscription): number {
+  if (!isPaid(sub) || !sub.endDate) return 0;
+  const ms = Date.now() - sub.endDate.getTime();
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+  return days > 0 ? days : 0;
+}
+
+/** Paid plan lapsed but still within the 7-day read-only grace window. */
+export function isInGracePeriod(sub: OrgSubscription): boolean {
+  const since = daysSinceExpiry(sub);
+  return since > 0 && since <= GRACE_PERIOD_DAYS;
 }
 
 export function isPaid(sub: OrgSubscription): boolean {
@@ -189,6 +233,35 @@ export function canCreateReport(sub: OrgSubscription): boolean {
   return remainingReports(sub) > 0;
 }
 
+/**
+ * Whether the lab may perform any write action (create/edit/delete report,
+ * generate invoice, edit prices, manage staff). Blocked once the subscription
+ * is expired — which includes the read-only grace window (grace makes
+ * `isExpired` true). Single source of truth for write gating across the app.
+ */
+export function canPerformWrites(sub: OrgSubscription): boolean {
+  return !isExpired(sub);
+}
+
+/** Coarse state for banner styling / messaging. */
+export function accessLevel(sub: OrgSubscription): "active" | "grace" | "expired" {
+  if (isInGracePeriod(sub)) return "grace";
+  if (isExpired(sub)) return "expired";
+  return "active";
+}
+
+/** Reason a write is blocked, or null when writes are allowed. */
+export function writeBlockReason(sub: OrgSubscription): string | null {
+  if (isInGracePeriod(sub)) {
+    const left = GRACE_PERIOD_DAYS - daysSinceExpiry(sub);
+    return `Your ${TIER_LABEL[sub.tier]} plan has lapsed — you're in a ${left}-day read-only grace period. Renew to continue.`;
+  }
+  if (isExpired(sub)) {
+    return `Your ${TIER_LABEL[sub.tier]} subscription has expired. Please renew to continue.`;
+  }
+  return null;
+}
+
 export function dailyAiLimit(sub: OrgSubscription): number {
   if (sub.tier === "trial") return 3;
   return planFor(sub.tier)?.dailyAiLimit ?? 0;
@@ -196,4 +269,10 @@ export function dailyAiLimit(sub: OrgSubscription): number {
 
 export function remainingAi(sub: OrgSubscription): number {
   return Math.max(0, dailyAiLimit(sub) - sub.aiUsedToday);
+}
+
+/** Max additional staff accounts allowed by the current plan (0 = owner only). */
+export function staffLimit(sub: OrgSubscription): number {
+  if (sub.tier === "trial" || sub.tier === "trialExpired") return 0;
+  return planFor(sub.tier)?.staffLimit ?? 0;
 }

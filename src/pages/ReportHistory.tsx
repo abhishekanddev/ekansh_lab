@@ -6,10 +6,12 @@ import { Spinner, EmptyState } from "../components/ui";
 import { ReportActionsSheet } from "../components/report/ReportActionsSheet";
 import { ReportRow } from "../components/report/ReportRow";
 import { useRecentReports } from "../hooks/useLabData";
+import { useCanWrite } from "../hooks/useSubscription";
 import type { LabReport } from "../lib/types";
 
 export function ReportHistory() {
   const reports = useRecentReports(200);
+  const { canWrite, reason } = useCanWrite();
   const [active, setActive] = useState<LabReport | null>(null);
   const [q, setQ] = useState("");
   const location = useLocation();
@@ -42,7 +44,9 @@ export function ReportHistory() {
         breadcrumb="Home / Reports"
         title="Reports"
         description="All completed lab reports."
-        actions={<Link to="/app/reports/new" className="btn btn-primary"><FilePlus2 size={16} /> New Report</Link>}
+        actions={canWrite
+          ? <Link to="/app/reports/new" className="btn btn-primary"><FilePlus2 size={16} /> New Report</Link>
+          : <button className="btn btn-primary opacity-50 cursor-not-allowed" disabled title={reason ?? undefined}><FilePlus2 size={16} /> New Report</button>}
       />
 
       <div className="relative mb-4 max-w-[420px]">

@@ -19,6 +19,7 @@ export interface LabParameter {
 
 /** Patient/report metadata embedded in a report's formData. */
 export interface ReportFormData {
+  title?: string;
   age?: string;
   gender?: string;
   phone?: string;
@@ -54,6 +55,7 @@ export interface LabReport {
 export interface LabPatient {
   id: string;
   hospitalId?: string;
+  title?: string;
   name: string;
   age?: string;
   gender?: string;

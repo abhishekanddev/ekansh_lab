@@ -7,13 +7,13 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { useSubscription } from "../hooks/useSubscription";
-import { TIER_LABEL, daysRemaining, isExpired, isExpiringSoon, isPaid } from "../lib/subscription";
+import { useSubscription, useCanWrite } from "../hooks/useSubscription";
+import { TIER_LABEL, daysRemaining, daysSinceExpiry, isExpired, isExpiringSoon, isInGracePeriod, GRACE_PERIOD_DAYS } from "../lib/subscription";
 
 const NAV = [
   { group: "Workspace" },
   { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/app/reports/new", label: "New Report", icon: FilePlus2 },
+  { to: "/app/reports/new", label: "New Report", icon: FilePlus2, write: true },
   { to: "/app/reports", label: "Reports", icon: FileText },
   { group: "Lab" },
   { to: "/app/catalog", label: "Test Catalog", icon: FlaskConical },
@@ -41,6 +41,7 @@ function roleLabel(role?: string | null): string {
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
   const { data: sub } = useSubscription();
+  const { canWrite, level, reason } = useCanWrite();
   const [confirmLogout, setConfirmLogout] = useState(false);
   const initials = (user?.name || "U").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
@@ -66,6 +67,16 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div key={i} className="px-3 pt-3.5 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                 {item.group}
               </div>
+            ) : "write" in item && item.write && !canWrite ? (
+              // Write-gated nav item — shown disabled while expired/in grace.
+              <span
+                key={item.to}
+                title={reason ?? undefined}
+                className="flex items-center gap-3 px-3 py-2 rounded-md mb-0.5 font-medium text-[13.5px] text-slate-600 cursor-not-allowed opacity-50"
+              >
+                <item.icon size={17} />
+                <span className="flex-1">{item.label}</span>
+              </span>
             ) : (
               <NavLink
                 key={item.to}
@@ -137,6 +148,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
+        {level !== "active" && reason && (
+          <div className={`flex items-center gap-3 px-5 py-2.5 text-[13px] border-b ${
+            level === "expired"
+              ? "bg-red-50 border-red-200 text-[var(--color-danger)]"
+              : "bg-orange-50 border-orange-200 text-orange-800"
+          }`}>
+            <AlertTriangle size={16} className="shrink-0" />
+            <span className="flex-1">{reason}</span>
+            <Link to="/app/subscription" className="font-semibold underline shrink-0">Renew now</Link>
+          </div>
+        )}
+
         <main className="flex-1 p-6">{children}</main>
       </div>
     </div>
@@ -149,17 +172,26 @@ function SubscriptionBadge({ sub }: { sub: ReturnType<typeof useSubscription>["d
   const days = daysRemaining(sub);
   const expired = isExpired(sub);
   const soon = isExpiringSoon(sub);
-  const paid = isPaid(sub);
+  const grace = isInGracePeriod(sub);
 
   let label: string;
   let Icon = Clock;
   let cls = "bg-[var(--color-primary-50)] text-[var(--color-primary-700)] border-[var(--color-primary-300)]";
-  if (expired) {
+  if (grace) {
+    // Paid plan lapsed but still within the read-only grace window.
+    const left = GRACE_PERIOD_DAYS - daysSinceExpiry(sub);
+    label = `Grace: ${left} ${left === 1 ? "day" : "days"}`;
+    Icon = AlertTriangle;
+    cls = "bg-orange-50 text-orange-700 border-orange-200";
+  } else if (expired) {
     label = "Expired";
     Icon = AlertTriangle;
     cls = "bg-red-50 text-[var(--color-danger)] border-red-200";
-  } else if (paid && days != null) {
-    label = `${days} ${days === 1 ? "day" : "days"} left`;
+  } else if (days != null) {
+    // Countdown for both paid plans and active trials.
+    label = sub.tier === "trial"
+      ? `Trial: ${days} ${days === 1 ? "day" : "days"} left`
+      : `${days} ${days === 1 ? "day" : "days"} left`;
     if (soon) cls = "bg-orange-50 text-orange-700 border-orange-200";
   } else {
     label = TIER_LABEL[sub.tier];

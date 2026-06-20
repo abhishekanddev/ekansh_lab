@@ -4,7 +4,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage
 import { PageHeader } from "../components/PageHeader";
 import { Spinner } from "../components/ui";
 import { useHospitalConfig, useSaveHospitalConfig } from "../hooks/useLabData";
-import { useHospitalId } from "../lib/auth";
+import { useHospitalId, useAuth } from "../lib/auth";
 import { storage } from "../lib/firebase";
 
 /**
@@ -17,6 +17,8 @@ type LayoutMode = "digital" | "image" | "preprinted";
 type Form = Record<string, string | number | boolean | undefined>;
 
 export function ReportConfig() {
+  const { user } = useAuth();
+  const isOwner = user?.role === "hospital";
   const config = useHospitalConfig();
   const save = useSaveHospitalConfig();
   const [form, setForm] = useState<Form>({});
@@ -74,7 +76,7 @@ export function ReportConfig() {
         breadcrumb="Home / Report Settings"
         title="Report Settings"
         description="Branding, signatories, layout and billing — shared with the Flutter app and printed on PDFs."
-        actions={<button className="btn btn-primary" disabled={save.isPending} onClick={onSave}><Save size={16} /> {saved ? "Saved ✓" : save.isPending ? "Saving…" : "Save"}</button>}
+        actions={isOwner ? <button className="btn btn-primary" disabled={save.isPending} onClick={onSave}><Save size={16} /> {saved ? "Saved ✓" : save.isPending ? "Saving…" : "Save"}</button> : undefined}
       />
 
       <div className="space-y-4 max-w-3xl">

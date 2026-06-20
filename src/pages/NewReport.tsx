@@ -7,19 +7,20 @@ import { InterpretationPreview } from "../components/report/InterpretationPrevie
 import { ReferredByField, referrerDisplayName } from "../components/report/ReferredByField";
 import { LAB_TEST_TEMPLATES, TEST_CATEGORIES, type CyclePhase } from "../data/labTestTemplates";
 import { buildInitialResults, genId, normalizePhone } from "../lib/reportBuilder";
+import { PATIENT_TITLES, genderForTitle, titleForGender, titleMismatchesGender, withTitle } from "../lib/titles";
 import { createVerificationEntry } from "../lib/verification";
 import { CYCLE_PHASE_LABELS } from "../lib/labLogic";
 import type { LabParameter, Referrer } from "../lib/types";
 import { useSaveReport, useUpsertPatientUhid, usePatientByPhone, useTestCatalog, useSaveCatalogPrice } from "../hooks/useLabData";
 import { useGenerateReportPdf } from "../hooks/usePdf";
 import { useSubscription } from "../hooks/useSubscription";
-import { canCreateReport, isExpired, remainingReports, TIER_LABEL } from "../lib/subscription";
+import { canCreateReport, isExpired, isInGracePeriod, remainingReports, TIER_LABEL } from "../lib/subscription";
 import { useAuth } from "../lib/auth";
 import { serverTimestamp } from "firebase/firestore";
 import { Link } from "react-router-dom";
 
 interface Patient {
-  name: string; age: string; gender: string; phone: string;
+  title: string; name: string; age: string; gender: string; phone: string;
   cyclePhase: CyclePhase; uhid: string;
 }
 
@@ -36,14 +37,16 @@ export function NewReport() {
   const { data: sub } = useSubscription();
   const quotaBlocked = !!sub && !canCreateReport(sub);
   const quotaReason = sub
-    ? isExpired(sub)
-      ? `Your ${TIER_LABEL[sub.tier]} subscription has expired. Please renew to create more reports.`
-      : `You've hit today's report limit on the ${TIER_LABEL[sub.tier]} plan. Upgrade or try again tomorrow.`
+    ? isInGracePeriod(sub)
+      ? `Your ${TIER_LABEL[sub.tier]} plan has lapsed — you're in a read-only grace period. Renew to create reports again.`
+      : isExpired(sub)
+        ? `Your ${TIER_LABEL[sub.tier]} subscription has expired. Please renew to create more reports.`
+        : `You've hit today's report limit on the ${TIER_LABEL[sub.tier]} plan. Upgrade or try again tomorrow.`
     : "";
 
   const [step, setStep] = useState(0);
   const [patient, setPatient] = useState<Patient>({
-    name: "", age: "", gender: "", phone: "", cyclePhase: "notApplicable", uhid: "",
+    title: "", name: "", age: "", gender: "", phone: "", cyclePhase: "notApplicable", uhid: "",
   });
   const [referrer, setReferrer] = useState<Referrer | null>(null);
 
@@ -56,6 +59,7 @@ export function NewReport() {
     if (found && clean.length === 10 && appliedPhone !== clean) {
       setPatient((p) => ({
         ...p,
+        title: p.title || (found.title ?? ""),
         name: p.name || found.name || "",
         age: p.age || (found.age ?? ""),
         gender: p.gender || (found.gender ?? ""),
@@ -90,6 +94,22 @@ export function NewReport() {
       (t) => (cat === "All" || t.category === cat) && (!ql || t.testName.toLowerCase().includes(ql)),
     );
   }, [q, cat]);
+
+  // Title ⇆ gender stay in sync: picking a title sets the implied gender, and
+  // picking a gender fills a blank/mismatched title with the default for it.
+  function onTitleChange(title: string) {
+    setPatient((p) => {
+      const g = genderForTitle(title);
+      return { ...p, title, gender: g || p.gender };
+    });
+  }
+  function onGenderChange(gender: string) {
+    setPatient((p) => ({
+      ...p,
+      gender,
+      title: !p.title || titleMismatchesGender(p.title, gender) ? titleForGender(gender) || p.title : p.title,
+    }));
+  }
 
   function toggleTest(name: string) {
     setSelected((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
@@ -155,7 +175,7 @@ const totalPrice = selected.reduce((s, n) => s + effectivePrice(n), 0);
       let uhid = patient.uhid;
       if (phone) {
         const generated = await upsertPatient.mutateAsync({
-          phone, name: patient.name, age: patient.age, gender: patient.gender,
+          phone, title: patient.title, name: patient.name, age: patient.age, gender: patient.gender,
         });
         if (generated) uhid = generated;
       }
@@ -178,7 +198,7 @@ const totalPrice = selected.reduce((s, n) => s + effectivePrice(n), 0);
         } catch { /* non-fatal — PDF falls back to a short code */ }
       }
 
-      const formData = { age: patient.age, gender: patient.gender, phone };
+      const formData = { title: patient.title, age: patient.age, gender: patient.gender, phone };
       const base = {
         id,
         patientName: patient.name,
@@ -289,11 +309,19 @@ const totalPrice = selected.reduce((s, n) => s + effectivePrice(n), 0);
                 <UserCheck size={13} /> Existing patient found — details prefilled{existing.data.uhid ? ` · ${existing.data.uhid}` : ""}.
               </div>
             )}
-            <Field label="Full name *"><input className="input" value={patient.name} onChange={(e) => setPatient({ ...patient, name: e.target.value })} /></Field>
+            <div className="grid grid-cols-[88px_1fr] gap-3">
+              <Field label="Title">
+                <select className="input" value={patient.title} onChange={(e) => onTitleChange(e.target.value)}>
+                  <option value="">—</option>
+                  {PATIENT_TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label="Full name *"><input className="input" value={patient.name} onChange={(e) => setPatient({ ...patient, name: e.target.value })} /></Field>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Age"><input className="input" value={patient.age} onChange={(e) => setPatient({ ...patient, age: e.target.value })} /></Field>
               <Field label="Gender">
-                <select className="input" value={patient.gender} onChange={(e) => setPatient({ ...patient, gender: e.target.value })}>
+                <select className="input" value={patient.gender} onChange={(e) => onGenderChange(e.target.value)}>
                   <option value="">—</option><option>Male</option><option>Female</option><option>Other</option>
                 </select>
               </Field>
@@ -434,7 +462,7 @@ const totalPrice = selected.reduce((s, n) => s + effectivePrice(n), 0);
         <div className="card p-6 max-w-2xl">
           <h3 className="font-semibold mb-4">Review</h3>
           <dl className="grid grid-cols-2 gap-y-2 text-sm mb-5">
-            <Dt label="Patient" value={patient.name} />
+            <Dt label="Patient" value={withTitle(patient.title, patient.name)} />
             <Dt label="Age / Sex" value={[patient.age, patient.gender].filter(Boolean).join(" / ") || "—"} />
             <Dt label="Phone" value={patient.phone || "—"} />
             <Dt label="Referred by" value={referrer ? referrerDisplayName(referrer) : "—"} />

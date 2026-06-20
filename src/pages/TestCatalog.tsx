@@ -4,11 +4,13 @@ import { PageHeader } from "../components/PageHeader";
 import { Spinner } from "../components/ui";
 import { LAB_TEST_TEMPLATES, TEST_CATEGORIES } from "../data/labTestTemplates";
 import { useTestCatalog, useSaveCatalogPrice } from "../hooks/useLabData";
+import { useCanWrite } from "../hooks/useSubscription";
 import { fmtMoney } from "../lib/format";
 
 export function TestCatalog() {
   const catalog = useTestCatalog();
   const savePrice = useSaveCatalogPrice();
+  const { canWrite, reason } = useCanWrite();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string>("All");
   const [editing, setEditing] = useState<string | null>(null);
@@ -107,7 +109,7 @@ export function TestCatalog() {
                             <Save size={14} />
                           </button>
                         </div>
-                      ) : (
+                      ) : canWrite ? (
                         <button
                           className="num hover:underline text-[var(--color-primary-600)] font-medium inline-flex items-center gap-1"
                           onClick={() => startEdit(t.testName)}
@@ -115,6 +117,11 @@ export function TestCatalog() {
                           {ov ? fmtMoney(ov.price) : <span className="text-[var(--color-faint)]">Set price</span>}
                           {ov && <Check size={12} className="text-[var(--color-success)]" />}
                         </button>
+                      ) : (
+                        <span className="num inline-flex items-center gap-1 text-[var(--color-muted)]" title={reason ?? undefined}>
+                          {ov ? fmtMoney(ov.price) : <span className="text-[var(--color-faint)]">—</span>}
+                          {ov && <Check size={12} className="text-[var(--color-success)]" />}
+                        </span>
                       )}
                     </td>
                   </tr>

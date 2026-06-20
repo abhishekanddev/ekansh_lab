@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, Download, Printer, Send, Link2, Pencil, Receipt, X, FileText, Trash2, Loader2, RefreshCw } from "lucide-react";
-import { useHospitalId } from "../../lib/auth";
-import { useDeleteReport, useTestCatalog, useReport } from "../../hooks/useLabData";
+import { useHospitalId, useAuth } from "../../lib/auth";
+import { useDeleteReport, useTestCatalog, useReport, useCanDeleteReports } from "../../hooks/useLabData";
+import { useCanWrite } from "../../hooks/useSubscription";
 import { useGenerateReportPdf } from "../../hooks/usePdf";
 import { CreateInvoiceModal, type InvoiceSeed } from "../../pages/Invoices";
 import type { LabReport } from "../../lib/types";
@@ -14,7 +15,11 @@ import type { LabReport } from "../../lib/types";
 export function ReportActionsSheet({ report: initialReport, onClose }: { report: LabReport; onClose: () => void }) {
   const nav = useNavigate();
   const hid = useHospitalId();
+  const { user } = useAuth();
   const del = useDeleteReport();
+  const canDelete = useCanDeleteReports();
+  const { canWrite } = useCanWrite();
+  const isOwner = user?.role === "hospital";
   const catalog = useTestCatalog();
   const [deleting, setDeleting] = useState(false);
   const [invoicing, setInvoicing] = useState(false);
@@ -136,25 +141,36 @@ export function ReportActionsSheet({ report: initialReport, onClose }: { report:
           )}
           <Action icon={<Send size={20} />} color="#25D366" title="Send via WhatsApp" subtitle="Share the report link with the patient" onClick={whatsapp} />
           <Action icon={<Link2 size={20} />} color="#2563EB" title="Copy verification link" subtitle="Patient views the report in a browser" onClick={copyLink} />
-          <Action icon={<Pencil size={20} />} color="#E67E22" title="Edit report" subtitle="Modify values and re-generate the PDF" onClick={() => go(`/app/reports/${report.id}/verify`)} />
+          {canWrite && (
+            <Action icon={<Pencil size={20} />} color="#E67E22" title="Edit report" subtitle="Modify values and re-generate the PDF" onClick={() => go(`/app/reports/${report.id}/verify`)} />
+          )}
 
-          <div className="px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-faint)]">Invoice</div>
-          <Action
-            icon={<Receipt size={20} />}
-            color="#2E7D32"
-            title={billed ? "View billing" : "Generate invoice"}
-            subtitle={billed ? "Open the billing page" : "Create a bill pre-filled from this report"}
-            onClick={() => (billed ? go("/app/invoices") : setInvoicing(true))}
-          />
+          {/* Viewing an existing bill is always allowed; creating one is a write. */}
+          {(billed || canWrite) && (
+            <>
+              <div className="px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-faint)]">Invoice</div>
+              <Action
+                icon={<Receipt size={20} />}
+                color="#2E7D32"
+                title={billed ? "View billing" : "Generate invoice"}
+                subtitle={billed ? "Open the billing page" : "Create a bill pre-filled from this report"}
+                onClick={() => (billed ? go("/app/invoices") : setInvoicing(true))}
+              />
+            </>
+          )}
 
-          <div className="px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-faint)]">Danger zone</div>
-          <Action
-            icon={deleting ? <Loader2 size={20} className="animate-spin" /> : <Trash2 size={20} />}
-            color="#DC2626"
-            title="Delete report"
-            subtitle="Permanently remove this report"
-            onClick={deleting ? () => {} : onDelete}
-          />
+          {isOwner && canWrite && canDelete && (
+            <>
+              <div className="px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-faint)]">Danger zone</div>
+              <Action
+                icon={deleting ? <Loader2 size={20} className="animate-spin" /> : <Trash2 size={20} />}
+                color="#DC2626"
+                title="Delete report"
+                subtitle="Permanently remove this report"
+                onClick={deleting ? () => {} : onDelete}
+              />
+            </>
+          )}
         </div>
       </div>
 

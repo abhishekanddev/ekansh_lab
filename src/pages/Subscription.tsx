@@ -6,7 +6,8 @@ import { useSubscription } from "../hooks/useSubscription";
 import { useAuth } from "../lib/auth";
 import { upgradePlan } from "../lib/razorpay";
 import {
-  PAID_PLANS, TIER_LABEL, planFor, daysRemaining, isExpired, isExpiringSoon, isPaid,
+  PAID_PLANS, TIER_LABEL, planFor, daysRemaining, daysSinceExpiry, isExpired, isExpiringSoon,
+  isInGracePeriod, isPaid, GRACE_PERIOD_DAYS,
   dailyReportLimit, remainingReports, dailyAiLimit, remainingAi, type SubscriptionTier,
 } from "../lib/subscription";
 
@@ -40,6 +41,8 @@ export function Subscription() {
     return {
       label: TIER_LABEL[sub.tier],
       expired: isExpired(sub),
+      grace: isInGracePeriod(sub),
+      graceDaysLeft: GRACE_PERIOD_DAYS - daysSinceExpiry(sub),
       soon: isExpiringSoon(sub),
       days: daysRemaining(sub),
       reportLimit: dailyReportLimit(sub),
@@ -65,9 +68,9 @@ export function Subscription() {
       {sub && summary && (
         <div
           className={`rounded-xl p-6 mb-6 text-white relative overflow-hidden ${
-            summary.expired
+            summary.expired && !summary.grace
               ? "bg-gradient-to-br from-[#b91c1c] to-[#7f1d1d]"
-              : summary.soon
+              : summary.grace || summary.soon
                 ? "bg-gradient-to-br from-[#ea580c] to-[#c2410c]"
                 : "bg-gradient-to-br from-[var(--color-primary-700,#0f47a1)] to-[var(--color-primary-600,#1559c9)]"
           }`}
@@ -78,12 +81,17 @@ export function Subscription() {
                 <Crown size={14} /> Current Plan
               </div>
               <div className="text-3xl font-bold mt-1.5">{summary.label}</div>
-              {summary.paid && summary.days != null && !summary.expired && (
+              {summary.days != null && !summary.expired && (
                 <div className="mt-3 inline-flex items-center gap-1.5 bg-white/15 rounded-full px-3 py-1 text-[13px] font-semibold">
                   <Clock size={13} /> {summary.days} {summary.days === 1 ? "day" : "days"} left
                 </div>
               )}
-              {summary.expired && (
+              {summary.grace && (
+                <div className="mt-3 inline-flex items-center gap-1.5 bg-white/15 rounded-full px-3 py-1 text-[13px] font-semibold">
+                  <AlertTriangle size={13} /> Grace period — {summary.graceDaysLeft} read-only {summary.graceDaysLeft === 1 ? "day" : "days"} left, renew to continue
+                </div>
+              )}
+              {summary.expired && !summary.grace && (
                 <div className="mt-3 inline-flex items-center gap-1.5 bg-white/15 rounded-full px-3 py-1 text-[13px] font-semibold">
                   <AlertTriangle size={13} /> Expired — please renew to continue
                 </div>
