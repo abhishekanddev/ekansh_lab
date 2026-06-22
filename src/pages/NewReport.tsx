@@ -11,7 +11,7 @@ import { PATIENT_TITLES, genderForTitle, titleForGender, titleMismatchesGender, 
 import { createVerificationEntry } from "../lib/verification";
 import { CYCLE_PHASE_LABELS } from "../lib/labLogic";
 import type { LabParameter, Referrer } from "../lib/types";
-import { useSaveReport, useUpsertPatientUhid, usePatientByPhone, useTestCatalog, useSaveCatalogPrice } from "../hooks/useLabData";
+import { useSaveReport, useUpsertPatientUhid, usePatientByPhone, useTestCatalog, useSaveCatalogPrice, useActivityLogger } from "../hooks/useLabData";
 import { useGenerateReportPdf } from "../hooks/usePdf";
 import { useSubscription } from "../hooks/useSubscription";
 import { canCreateReport, isExpired, isInGracePeriod, remainingReports, TIER_LABEL } from "../lib/subscription";
@@ -34,6 +34,7 @@ export function NewReport() {
   const generatePdf = useGenerateReportPdf();
   const upsertPatient = useUpsertPatientUhid();
   const saveCatalogPrice = useSaveCatalogPrice();
+  const logActivity = useActivityLogger();
   const { data: sub } = useSubscription();
   const quotaBlocked = !!sub && !canCreateReport(sub);
   const quotaReason = sub
@@ -240,6 +241,8 @@ const totalPrice = selected.reduce((s, n) => s + effectivePrice(n), 0);
           sections,
         });
       }
+
+      logActivity({ action: "report_created", target_name: patient.name || selected.join(", ") || id });
 
       // Kick off PDF generation in the background and flag it so the report
       // list opens the actions sheet showing a "Generating PDF…" state.

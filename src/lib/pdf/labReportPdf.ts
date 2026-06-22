@@ -184,7 +184,7 @@ function patientInfoGrid(report: LabReport, assets: Assets, verificationCode?: s
   // to match the mobile PDF (no extra spacer rows between KVs).
   const leftStack: Content[] = [];
   if (name) leftStack.push(patientKv("Patient Name", name, true));
-  leftStack.push(patientKv("Age / Sex", `${age} Yrs / ${gender}`.trim()));
+  leftStack.push(patientKv("Age/Gender", [age, gender].filter(Boolean).join(" / ")));
   if (referredBy) leftStack.push(patientKv("Referred by", referredBy));
   if (uhid) leftStack.push(patientKv("UHID", uhid));
   if (phone) leftStack.push(patientKv("Phone", phone));

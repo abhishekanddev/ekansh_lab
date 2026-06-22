@@ -84,30 +84,37 @@ export function useReport(id?: string) {
 
 export function useSaveReport() {
   const hid = useHospitalId();
-  const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (report: Partial<LabReport> & { id: string }) => {
       const { id, ...data } = report;
       const payload: Record<string, unknown> = { ...data, id };
-      // A brand-new report has no createdAt yet; edits already carry one.
-      const isNew = !("createdAt" in data);
-      if (isNew) payload.createdAt = serverTimestamp();
+      if (!("createdAt" in data)) payload.createdAt = serverTimestamp();
       await setDoc(hospitalDoc(hid!, COL.reports, id), payload, { merge: true });
-      if (isNew) {
-        try {
-          await logActivity(hid, {
-            action: "report_created",
-            target_name: report.patientName || report.testType || id,
-            performed_by: user?.name,
-            performed_by_uid: user?.uid,
-          });
-        } catch { /* audit logging is best-effort */ }
-      }
       return id;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reports", hid] }),
   });
+}
+
+/**
+ * Returns a fire-and-forget activity logger bound to the current hospital + user.
+ * Used at call sites where create-vs-edit intent is known (the save mutation
+ * itself can't tell them apart — both carry `createdAt`). Mirrors the Flutter
+ * `logLabActivity` helper. Never throws — audit logging must not block the user.
+ */
+export function useActivityLogger() {
+  const hid = useHospitalId();
+  const { user } = useAuth();
+  return async (entry: { action: string; target_name?: string; metadata?: Record<string, unknown> }) => {
+    try {
+      await logActivity(hid, {
+        ...entry,
+        performed_by: user?.name,
+        performed_by_uid: user?.uid,
+      });
+    } catch { /* best-effort */ }
+  };
 }
 
 export function useDeleteReport() {

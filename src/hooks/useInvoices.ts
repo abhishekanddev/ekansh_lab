@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { runTransaction, doc as fbDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { requireDb, hospitalCol, hospitalDoc, COL } from "../lib/db";
-import { useHospitalId } from "../lib/auth";
+import { requireDb, hospitalCol, hospitalDoc, COL, logActivity } from "../lib/db";
+import { useHospitalId, useAuth } from "../lib/auth";
 import type { InvoiceLineItem } from "../lib/types";
 
 export interface CreateInvoiceInput {
@@ -26,6 +26,7 @@ const pad = (n: number) => n.toString().padStart(5, "0");
  *  mirroring InvoiceService.createInvoice in Flutter (compatible doc shape). */
 export function useCreateInvoice() {
   const hid = useHospitalId();
+  const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateInvoiceInput) => {
@@ -73,6 +74,16 @@ export function useCreateInvoice() {
       if (input.reportId) {
         await setDoc(hospitalDoc(hid!, COL.reports, input.reportId), { invoiceId: result.id }, { merge: true });
       }
+
+      try {
+        await logActivity(hid, {
+          action: "invoice_created",
+          target_name: `${result.invoiceNumber}${input.patientName ? ` · ${input.patientName}` : ""}`,
+          performed_by: user?.name,
+          performed_by_uid: user?.uid,
+          metadata: { amount: input.finalBillAmount },
+        });
+      } catch { /* audit logging is best-effort */ }
 
       return result;
     },

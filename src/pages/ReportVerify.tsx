@@ -5,7 +5,7 @@ import { PageHeader } from "../components/PageHeader";
 import { Spinner, EmptyState } from "../components/ui";
 import { ResultEntry } from "../components/report/ResultEntry";
 import { InterpretationPreview } from "../components/report/InterpretationPreview";
-import { useReport, useSaveReport } from "../hooks/useLabData";
+import { useReport, useSaveReport, useActivityLogger } from "../hooks/useLabData";
 import { useGenerateReportPdf } from "../hooks/usePdf";
 import { computeFlag } from "../lib/labLogic";
 import { generateInterpretation } from "../lib/interpretationEngine";
@@ -16,6 +16,7 @@ export function ReportVerify() {
   const { data, isLoading } = useReport(id);
   const saveReport = useSaveReport();
   const generatePdf = useGenerateReportPdf();
+  const logActivity = useActivityLogger();
   const nav = useNavigate();
 
   const [results, setResults] = useState<LabParameter[]>([]);
@@ -80,6 +81,7 @@ export function ReportVerify() {
         payload.parameterCount = results.length;
       }
       await saveReport.mutateAsync(payload);
+      logActivity({ action: "report_edited", target_name: data.patientName || data.testType || data.id });
       // Fire PDF generation in background — don't await so navigation is instant.
       generatePdf.mutate(data);
       nav("/app/reports");

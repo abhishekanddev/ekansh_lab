@@ -345,9 +345,7 @@ function GridInput({
 
   function toggleTube(row: string, col: string) {
     const next: Record<string, Record<string, unknown>> = { ...gd, [row]: { ...(gd[row] ?? {}) } };
-    const cur = next[row][col] === true;
-    for (const c of cols) next[row][c] = false;
-    next[row][col] = !cur;
+    next[row][col] = next[row][col] !== true;
     onGrid(next, buildSummary(next));
   }
 

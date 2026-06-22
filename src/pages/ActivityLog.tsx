@@ -5,9 +5,13 @@ import { fmtDateTime } from "../lib/format";
 
 const ACTION_LABELS: Record<string, string> = {
   report_created: "Report created",
-  price_updated: "Price updated",
-  staff_added: "Staff added",
+  report_edited: "Report edited",
   report_deleted: "Report deleted",
+  price_updated: "Price updated",
+  catalog_seeded: "Catalog seeded",
+  invoice_created: "Invoice created",
+  staff_added: "Staff added",
+  permissions_updated: "Permissions updated",
 };
 
 export function ActivityLog() {
