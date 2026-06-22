@@ -140,6 +140,16 @@ export const DEFAULT_FORMULAS: Record<string, FormulaDefinition[]> = {
       inputParams: ["Albumin", "Globulin"],
     },
   ],
+  "Kidney Function Test (KFT)": [
+    {
+      targetParam: "BUN/Creatinine Ratio",
+      expression: "(Blood_Urea * 0.467) / Serum_Creatinine",
+      precision: 1,
+      displayFormula: "BUN/Creatinine Ratio = (Blood Urea × 0.467) ÷ Serum Creatinine",
+      description: "BUN estimated as 46.7% of Blood Urea; ratio used to differentiate pre-renal, renal, and post-renal causes of uremia.",
+      inputParams: ["Blood Urea", "Serum Creatinine"],
+    },
+  ],
   "Lipid Profile": [
     {
       targetParam: "VLDL Cholesterol",

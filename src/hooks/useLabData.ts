@@ -93,7 +93,10 @@ export function useSaveReport() {
       await setDoc(hospitalDoc(hid!, COL.reports, id), payload, { merge: true });
       return id;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reports", hid] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reports", hid] });
+      qc.invalidateQueries({ queryKey: ["report", hid] });
+    },
   });
 }
 
