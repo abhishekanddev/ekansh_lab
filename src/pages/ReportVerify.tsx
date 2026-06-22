@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Save, Sparkles } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
@@ -13,7 +13,7 @@ import type { LabParameter, LabReport } from "../lib/types";
 
 export function ReportVerify() {
   const { id } = useParams<{ id: string }>();
-  const { data, isLoading } = useReport(id);
+  const { data, isLoading, refetch } = useReport(id);
   const saveReport = useSaveReport();
   const generatePdf = useGenerateReportPdf();
   const logActivity = useActivityLogger();
@@ -24,12 +24,29 @@ export function ReportVerify() {
   const [showInterp, setShowInterp] = useState(false);
   const [activeSection, setActiveSection] = useState(0);
   const [saving, setSaving] = useState(false);
+  // ready = fresh data has been fetched from Firestore (not just served from cache)
+  const [ready, setReady] = useState(false);
+  // prevent re-seeding local state once the user has started editing
+  const seeded = useRef(false);
+
+  // Force a fresh Firestore fetch on every mount so the edit form never shows
+  // stale TanStack Query cache values from a prior session.
+  useEffect(() => {
+    seeded.current = false;
+    setReady(false);
+    let live = true;
+    refetch().finally(() => { if (live) setReady(true); });
+    return () => { live = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const isBatch = !!data?.sections?.length;
   const activeTestType = isBatch ? (data?.sections?.[activeSection].testType ?? "") : (data?.testType ?? "");
 
+  // Seed local state once from fresh data. seeded.current prevents background
+  // refetches (e.g. window-focus) from overwriting the user's in-progress edits.
   useEffect(() => {
-    if (!data) return;
+    if (!ready || !data || seeded.current) return;
     if (data.sections?.length) {
       setResults(data.sections[0].results ?? []);
       setObservation(data.sections[0].observation ?? "");
@@ -39,10 +56,10 @@ export function ReportVerify() {
       setObservation(data.observation ?? "");
       setShowInterp(data.showInterpretation === true);
     }
-  }, [data]);
+    seeded.current = true;
+  }, [data, ready]);
 
   function switchSection(i: number) {
-    // persist current edits back into data.sections before switching
     if (data?.sections) {
       data.sections[activeSection] = { ...data.sections[activeSection], results, observation, showInterpretation: showInterp };
     }
@@ -68,7 +85,8 @@ export function ReportVerify() {
     try {
       const payload: Partial<LabReport> & { id: string; createdAt?: unknown } = {
         id: data.id,
-        createdAt: data.createdAt, // preserve — don't reset timestamp
+        createdAt: data.createdAt,
+        pdfUrl: "", // clear old URL so the cloud function regenerates (not early-returns)
       };
       if (isBatch && data.sections) {
         const sections = data.sections.map((s, i) => (i === activeSection ? { ...s, results, observation, showInterpretation: showInterp } : s));
@@ -82,7 +100,9 @@ export function ReportVerify() {
       }
       await saveReport.mutateAsync(payload);
       logActivity({ action: "report_edited", target_name: data.patientName || data.testType || data.id });
-      // Fire PDF generation in background — don't await so navigation is instant.
+      // Mark as generating so the actions sheet shows the "Generating PDF…" state,
+      // same as after new report creation.
+      sessionStorage.setItem("pdfGenerating", data.id);
       generatePdf.mutate(data);
       nav("/app/reports");
     } finally {
@@ -90,7 +110,7 @@ export function ReportVerify() {
     }
   }
 
-  if (isLoading) return <Spinner />;
+  if (isLoading || !ready) return <Spinner />;
   if (!data) return <EmptyState title="Report not found" action={<Link to="/app/reports" className="btn btn-secondary">Back to reports</Link>} />;
 
   return (

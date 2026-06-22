@@ -515,7 +515,7 @@ export async function buildReportDoc(report: LabReport, config: HospitalConfig, 
     pathSig: await fetchAsDataUrl(cfg(config, "pathologist_signature_url", "pathologistSignatureUrl") || undefined),
   };
 
-  const content: Content[] = [patientInfoGrid(report, assets, verificationCode)];
+  const content: Content[] = [];
 
   const renderTest = (testType: string, results: LabParameter[], observation: string | undefined, includeInterp: boolean) => {
     content.push(testTitle(testType));
@@ -543,10 +543,23 @@ export async function buildReportDoc(report: LabReport, config: HospitalConfig, 
   }
   content.push(endOfReport());
 
+  // Precompute the two header elements once. pdfMake mutates content objects
+  // (writing _positions, heights, etc.) during layout, so we must deep-clone
+  // them for every page — otherwise page 2+ sees already-processed objects
+  // and silently skips them, leaving the patient info box blank on page 2+.
+  const headerWidgetDef = headerWidget(config, assets);
+  const patientInfoDef = patientInfoGrid(report, assets, verificationCode);
+
   return {
     pageSize: "A4",
-    pageMargins: [42, 90, 42, 120],
-    header: () => ({ stack: [headerWidget(config, assets)], margin: [42, 32, 42, 0] }),
+    pageMargins: [42, 175, 42, 120],
+    header: () => ({
+      stack: [
+        JSON.parse(JSON.stringify(headerWidgetDef)) as Content,
+        JSON.parse(JSON.stringify(patientInfoDef)) as Content,
+      ],
+      margin: [42, 32, 42, 0],
+    }),
     footer: (currentPage: number, pageCount: number) => footer(config, assets, currentPage, pageCount),
     content,
     defaultStyle: { font: "Roboto" },
